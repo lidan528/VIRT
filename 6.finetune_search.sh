@@ -1,0 +1,25 @@
+export CUDA_VISIBLE_DEVICES=3
+export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
+#export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
+#export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
+export BERT_MODEL_DIR=./output/search_siamese_l6h128A2_b192_addmax_alltoken
+export MY_DATASET=./train_data/spu_benchmark #全局变量 数据集所在地址
+#export OUTPUT=./output/search_spuall_3/
+export OUTPUT=./output/search_siamese_l6h128A2_b192_addmax_alltoken
+python s_bert.py \
+  --task_name=lcqmc \
+  --pooling_strategy=mean \
+  --do_train=false \
+  --do_eval=false \
+  --do_predict=true \
+  --data_dir=$MY_DATASET \
+  --vocab_file=$BERT_BASE_DIR/vocab.txt \
+  --bert_config_file=$BERT_BASE_DIR/bert_config_6_128_A2.json \
+  --init_checkpoint=$BERT_MODEL_DIR/model.ckpt-745 \
+  --max_seq_length=64 \
+  --train_batch_size=192 \
+  --learning_rate=2e-5 \
+  --test_flie_name=spuallpart-0003 \
+  --num_train_epochs=5.0 \
+  --do_save=false \
+  --output_dir=$OUTPUT

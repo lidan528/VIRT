@@ -1,0 +1,26 @@
+export CUDA_VISIBLE_DEVICES=0
+export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_mini128_L6h384_comment128_initwithstu
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_mini128_L6h384I1200_comment128/e3loss0.1287
+export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L3h384I1200_comment128
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/student_3_384_comment_initfromcommon
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_mini128_L6h384I1200_comment512/ckptloss0.1204e0.3
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L3h384I1200_comment128_wa
+#export BERT_MODEL=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
+export MY_DATASET=./train_data/ #全局变量 数据集所在地址
+export OUTPUT=./output/minilm128_output_l3h384i1200/
+python run_classifier.py \
+  --task_name=lcqmc \
+  --do_train=false \
+  --do_eval=false \
+  --do_predict=true \
+  --data_dir=$MY_DATASET \
+  --vocab_file=$BERT_BASE_DIR/vocab.txt \
+  --bert_config_file=$BERT_BASE_DIR/bert_config_3_384.json \
+  --init_checkpoint=$BERT_MODEL/model.ckpt-426375 \
+  --max_seq_length=128 \
+  --train_batch_size=64 \
+  --predict_batch_size=128 \
+  --learning_rate=5e-5 \
+  --num_train_epochs=5.0 \
+  --output_dir=$OUTPUT \
