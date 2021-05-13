@@ -6,6 +6,7 @@ import os
 import codecs
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers import initializers
+import json
 
 import pickle
 import csv
@@ -222,6 +223,59 @@ class DataProcessor(object):
                  lines.append(attr)
              return lines
 
+
+class MnliProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-dev.jsonl")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-test.jsonl")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1, 2]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      label = tokenization.convert_to_unicode(line['label']['cls'])
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
 
 
 class LcqmcProcessor(DataProcessor):
@@ -746,7 +800,7 @@ def main(_):
     #         examples, ner_label_map, label_list, max_seq_length, tokenizer, output_file, is_training=False):
 
     if FLAGS.do_train:
-        train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
+        train_file = os.path.join(FLAGS.output_dir, task_name+"train.tf_record")
         if tf.gfile.Exists(train_file):
             print("train file exists")
         else:
@@ -765,7 +819,7 @@ def main(_):
 
     if FLAGS.do_eval:
         eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-        eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+        eval_file = os.path.join(FLAGS.output_dir, task_name+"eval.tf_record")
 
         if not tf.gfile.Exists(eval_file):
             file_based_convert_examples_to_features(
@@ -795,7 +849,7 @@ def main(_):
 
         result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
 
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+        output_eval_file = os.path.join(FLAGS.output_dir, task_name+"eval_results.txt")
         with tf.gfile.GFile(output_eval_file, "w") as writer:
             tf.logging.info("***** Eval results *****")
             for key in sorted(result.keys()):
@@ -812,7 +866,7 @@ def main(_):
 
     if FLAGS.do_predict:
         predict_examples = processor.get_test_examples(FLAGS.data_dir, FLAGS.test_flie_name)
-        predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+        predict_file = os.path.join(FLAGS.output_dir, task_name+"predict.tf_record")
 
         if not tf.gfile.Exists(predict_file):
             file_based_convert_examples_to_features(predict_examples, label_list,FLAGS.max_seq_length, tokenizer, predict_file)

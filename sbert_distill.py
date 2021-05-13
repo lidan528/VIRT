@@ -71,10 +71,19 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length", 128,
+    "max_seq_length_bert", 128,
     "The maximum total input sequence length after WordPiece tokenization. "
+    "In the origin bert model"
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
+
+flags.DEFINE_integer(
+    "max_seq_length_s-bert", 256,
+    "The maximum total input sequence length after WordPiece tokenization. "
+    "In the s-bert model."
+    "Sequences longer than this will be truncated, and sequences shorter "
+    "than this will be padded.")
+
 flags.DEFINE_integer("log_step_count_steps", 50, "output log every x steps")
 flags.DEFINE_bool("do_train", False, "Whether to run training.")
 
@@ -266,6 +275,49 @@ class LcqmcProcessor(DataProcessor):
         return examples
 
 
+class MnliProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "dev.tsv")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    return ["contradiction", "entailment", "neutral"]
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      if i == 0:
+        continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line[0])
+      text_b = tokenization.convert_to_unicode(line[1])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      label = tokenization.convert_to_unicode(line[2])
+      if label == tokenization.convert_to_unicode("contradictory"):
+        label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
+
 def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
                            tokenizer):
     """Converts a single `InputExample` into a single `InputFeatures`."""
@@ -358,6 +410,147 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
                             label_id)
 
     return feature
+
+
+def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_bert, max_seq_length_s_bert,
+                           tokenizer):
+    """
+    由于teacher模型与student模型的输入不一致，所以需要在convert_example中同时赋予两种输入
+    """
+    """Converts a single `InputExample` into a single `InputFeatures`."""
+    label_map = {}
+    for (i, label) in enumerate(rele_label_list):
+        label_map[label] = i
+
+    # tokens_a = tokenizer.tokenize(example.text_a)
+    # tokens_b = None
+    # if example.text_b:
+    #     tokens_b = tokenizer.tokenize(example.text_b)
+    tokens_a = tokenizer.tokenize(example.text_a)
+    tokens_b = tokenizer.tokenize(example.text_b)
+
+    if len(tokens_a) > max_seq_length_bert - 2:
+        tokens_a = tokens_a[0:(max_seq_length_bert - 2)]
+
+    if len(tokens_b) > max_seq_length_bert - 2:
+        tokens_b = tokens_b[0:(max_seq_length_bert - 2)]
+
+    # The convention in BERT is:
+    # (a) For sequence pairs:
+    #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+    #  type_ids: 0     0  0    0    0     0       0 0     1  1  1  1   1 1
+    # (b) For single sequences:
+    #  tokens:   [CLS] the dog is hairy . [SEP]
+    #  type_ids: 0     0   0   0  0     0 0
+    #
+    # Where "type_ids" are used to indicate whether this is the first
+    # sequence or the second sequence. The embedding vectors for `type=0` and
+    # `type=1` were learned during pre-training and are added to the wordpiece
+    # embedding vector (and position vector). This is not *strictly* necessary
+    # since the [SEP] token unambiguously separates the sequences, but it makes
+    # it easier for the model to learn the concept of sequences.
+    #
+    # For classification tasks, the first vector (corresponding to [CLS]) is
+    # used as as the "sentence vector". Note that this only makes sense because
+    # the entire model is fine-tuned.
+    def build_bert_input_bert(tokens_tmp_a, tokens_tmp_b):
+        """
+        为了能够将双塔和交互的att score map对应, 在交互中将sen1与sen2对半分开;
+        在双塔模型中, 将sen1与sen2分别设置为对半分开的max_len
+        """
+        # 交互: [CLS] a,a,a,a,a,a, [SEP], b, b, b, b ,b [SEP]
+        max_token_len = max_seq_length_bert - 3
+        max_a_len = max_token_len // 2
+        max_b_len = max_token_len - max_a_len
+        if len(tokens_tmp_a) > max_a_len:
+            tokens_tmp_a = tokens_tmp_a[0:max_a_len]
+        if len(tokens_tmp_b) > max_b_len:
+            tokens_tmp_b = tokens_tmp_b[0:max_b_len]
+        tokens_list_a, tokens_list_b = [], []
+        segment_ids_ab = []
+        tokens_list_a.append("[CLS]")
+        segment_ids_ab.append(0)
+        for t_a in tokens_tmp_a:
+            tokens_list_a.append(t_a)
+            segment_ids_ab.append(0)
+        tokens_list_a.append("[SEP]")
+        segment_ids_ab.append(0)
+
+        input_ids_list_a = tokenizer.convert_tokens_to_ids(tokens_list_a)
+        input_masks_ab = [1]*len(input_ids_list_a)
+        while len(input_ids_list_a) < 2+max_a_len: # [CLS], a, [SEP], pad, pad, ...   to 2+max_a_len
+            input_ids_list_a.append(0)
+            input_masks_ab.append(0)
+            segment_ids_ab.append(0)
+        #---------------------------------
+        for t_b in tokens_tmp_b:
+            tokens_list_b.append(t_b)
+            input_masks_ab.append(1)
+            segment_ids_ab.append(1)
+        tokens_list_b.append("[SEP]")
+        segment_ids_ab.append(1)
+
+        input_ids_list_b = tokenizer.convert_tokens_to_ids(tokens_list_b)
+        input_ids_list_ab = input_ids_list_a + input_ids_list_b     # [CLS], aaa, [SEP], pad... bbb, [SEP], pad...
+        while len(input_ids_list_ab) <  max_seq_length_bert:
+            input_ids_list_ab.append(0)
+            input_masks_ab.append(0)
+            segment_ids_ab.append(1)
+
+        return input_ids_list_ab, input_masks_ab, segment_ids_ab
+
+
+    def build_bert_input_s_bert(tokens_temp):
+        tokens_p = []
+        segment_ids = []
+
+        tokens_p.append("[CLS]")
+        segment_ids.append(0)
+
+        for token in tokens_temp:
+            tokens_p.append(token)
+            segment_ids.append(0)
+
+        tokens_p.append("[SEP]")
+        segment_ids.append(0)
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
+        input_mask = [1] * len(input_ids)
+
+        while len(input_ids) < max_seq_length_b:
+            input_ids.append(0)
+            input_mask.append(0)
+            segment_ids.append(0)
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+
+        if ex_index < 5:
+            tf.logging.info("*** Example ***")
+            tf.logging.info("guid: %s" % (example.guid))
+            tf.logging.info("tokens: %s" % " ".join(
+                [tokenization.printable_text(x) for x in tokens_p]))
+
+            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+
+        return input_ids, input_mask, segment_ids
+
+    input_ids_a, input_mask_a, segment_ids_a = build_bert_input_s_bert(tokens_a)
+    input_ids_b, input_mask_b, segment_ids_b = build_bert_input_s_bert(tokens_b)
+
+    label_id = label_map[example.label]
+
+    if ex_index < 5:
+        tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
+
+    feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a, input_ids_b, input_mask_b, segment_ids_b,
+                            label_id)
+
+    return feature
+
 
 
 def file_based_convert_examples_to_features(
@@ -513,7 +706,7 @@ def create_model(bert_config, is_training, input_ids, input_mask,
         tf.logging.info("pooling_strategy error")
         assert 1 == 2
 
-    return output_layer
+    return output_layer, model
 
 
 def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate,
@@ -538,17 +731,17 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_b = features["input_mask_b"]
             segment_ids_b = features["segment_ids_b"]
             label_ids = features["label_ids"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
+            query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
                                            use_one_hot_embeddings)
-            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b,
+            doc_embedding, _ = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b,
                                          use_one_hot_embeddings)
         else:
             input_ids_a = features["input_ids_a"]
             input_mask_a = features["input_mask_a"]
             segment_ids_a = features["segment_ids_a"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
+            query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
                                            use_one_hot_embeddings)
-            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
+            doc_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
                                          use_one_hot_embeddings)
             label_ids = 0
         # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
