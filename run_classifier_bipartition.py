@@ -575,7 +575,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     input_masks.append(0)
     segment_ids.append(0)
   tokens.append("[SEP]")
-  input_ids += tokenizer.convert_tokens_to_ids(["SEP"])     #[CLS], a,a,a,<PAD>,[SEP],
+  input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])     #[CLS], a,a,a,<PAD>,[SEP],
   input_masks.append(1)
   segment_ids.append(0)
 
@@ -590,7 +590,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     input_masks.append(0)
     segment_ids.append(1)
   tokens.append("[SEP]")
-  input_ids += tokenizer.convert_tokens_to_ids(["SEP"])  # [CLS], a,a,a,<PAD>,[SEP], b,b,b,<PAD>, [SEP]
+  input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>,[SEP], b,b,b,<PAD>, [SEP]
   input_masks.append(1)
   segment_ids.append(1)
 
@@ -604,7 +604,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     tf.logging.info("*** Example ***")
     tf.logging.info("guid: %s" % (example.guid))
     tf.logging.info("tokens: %s" % " ".join(
-        [tokenization.printable_text(x) for x in ["CLS"]+tokens_a+["SEP"]+tokens_b+["SEP"]]))
+        [tokenization.printable_text(x) for x in ["[CLS]"]+tokens_a+["[SEP]"]+tokens_b+["[SEP]"]]))
     tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
     tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_masks]))
     tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
