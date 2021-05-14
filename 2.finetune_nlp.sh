@@ -1,5 +1,5 @@
 export CUDA_VISIBLE_DEVICES=6
-export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12/
+export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/
 python run_classifier.py \
