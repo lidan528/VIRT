@@ -270,7 +270,8 @@ class MnliProcessor(DataProcessor):
       #if set_type == "test":
       #  label = "contradiction"
       #else:
-      label = tokenization.convert_to_unicode(line['label']['cls'])
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
       # if label == tokenization.convert_to_unicode("contradictory"):
       #   label = tokenization.convert_to_unicode("contradiction")
       examples.append(
