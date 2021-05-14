@@ -855,6 +855,7 @@ def main(_):
 
     processors = {
         "lcqmc": LcqmcProcessor,
+        "mnli": MnliProcessor
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
