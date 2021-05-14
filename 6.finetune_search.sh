@@ -15,7 +15,7 @@ python s_bert.py \
   --data_dir=$MY_DATASET \
   --vocab_file=$BERT_MODEL_DIR/vocab.txt \
   --bert_config_file=$BERT_MODEL_DIR/bert_config.json \
-  --init_checkpoint=$BERT_MODEL_DIR/model.ckpt \
+  --init_checkpoint=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length=130 \
   --train_batch_size=64 \
   --learning_rate=5e-5 \
