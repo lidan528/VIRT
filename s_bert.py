@@ -16,7 +16,7 @@ import collections
 import random
 
 import sys
-reload(sys)
+# reload(sys)
 sys.setdefaultencoding('utf-8')
 
 flags = tf.flags
