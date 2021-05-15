@@ -435,6 +435,17 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
+
+        if ex_index < 5:
+            tf.logging.info("*** Example ***")
+            tf.logging.info("guid: %s" % (example.guid))
+            tf.logging.info("tokens: %s" % " ".join(
+                [tokenization.printable_text(x) for x in tokens_p]))
+
+            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+
         return input_ids, input_mask, segment_ids
 
     input_ids_a, input_mask_a, segment_ids_a = build_bert_input_s_bert(tokens_a)
@@ -442,16 +453,6 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
 
 
     label_id = label_map[example.label]
-
-    if ex_index < 5:
-        tf.logging.info("*** Example ***")
-        tf.logging.info("guid: %s" % (example.guid))
-        tf.logging.info("tokens: %s" % " ".join(
-            [tokenization.printable_text(x) for x in tokens_p]))
-
-        tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-        tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-        tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
 
     feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a,input_ids_b, input_mask_b, segment_ids_b, label_id)
 
