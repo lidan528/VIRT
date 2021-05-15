@@ -368,53 +368,90 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
     # used as as the "sentence vector". Note that this only makes sense because
     # the entire model is fine-tuned.
 
-    def build_bert_input(tokens_temp):
+    # def build_bert_input(tokens_temp):
+    #     tokens_p = []
+    #     segment_ids = []
+    #
+    #     tokens_p.append("[CLS]")
+    #     segment_ids.append(0)
+    #
+    #     for token in tokens_temp:
+    #         tokens_p.append(token)
+    #         segment_ids.append(0)
+    #
+    #     tokens_p.append("[SEP]")
+    #     segment_ids.append(0)
+    #
+    #     input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
+    #     input_mask = [1] * len(input_ids)
+    #
+    #     while len(input_ids) < max_seq_length:
+    #         input_ids.append(0)
+    #         input_mask.append(0)
+    #         segment_ids.append(0)
+    #
+    #     assert len(input_ids) == max_seq_length
+    #     assert len(input_mask) == max_seq_length
+    #     assert len(segment_ids) == max_seq_length
+    #
+    #     if ex_index < 5:
+    #         tf.logging.info("*** Example ***")
+    #         tf.logging.info("guid: %s" % (example.guid))
+    #         tf.logging.info("tokens: %s" % " ".join(
+    #             [tokenization.printable_text(x) for x in tokens_p]))
+    #
+    #         tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+    #         tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+    #         tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+    #
+    #
+    #     return input_ids,input_mask,segment_ids
+
+    def build_bert_input_s_bert(tokens_temp):
+
+        if len(tokens_temp) > max_seq_length - 2:
+            tokens_temp = tokens_temp[0: (max_seq_length - 2)]
+
         tokens_p = []
         segment_ids = []
-
         tokens_p.append("[CLS]")
         segment_ids.append(0)
 
         for token in tokens_temp:
             tokens_p.append(token)
             segment_ids.append(0)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
+        input_mask = [1] * len(input_ids)  # [CLS], a,a,a
 
-        tokens_p.append("[SEP]")
-        segment_ids.append(0)
-
-        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
-        input_mask = [1] * len(input_ids)
-
-        while len(input_ids) < max_seq_length:
+        while len(input_ids) < max_seq_length-1: # [CLS], a,a,a,<PAD>,
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
+        tokens_p.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])     # [CLS], a,a,a,<PAD>, [SEP]
+        input_mask.append(1)
+        segment_ids.append(0)
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
+        return input_ids, input_mask, segment_ids
 
-        if ex_index < 5:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("guid: %s" % (example.guid))
-            tf.logging.info("tokens: %s" % " ".join(
-                [tokenization.printable_text(x) for x in tokens_p]))
-
-            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-
-
-        return input_ids,input_mask,segment_ids
-
-    input_ids_a, input_mask_a, segment_ids_a = build_bert_input(tokens_a)
-    input_ids_b, input_mask_b, segment_ids_b = build_bert_input(tokens_b)
+    input_ids_a, input_mask_a, segment_ids_a = build_bert_input_s_bert(tokens_a)
+    input_ids_b, input_mask_b, segment_ids_b = build_bert_input_s_bert(tokens_b)
 
 
     label_id = label_map[example.label]
 
     if ex_index < 5:
-        tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
+        tf.logging.info("*** Example ***")
+        tf.logging.info("guid: %s" % (example.guid))
+        tf.logging.info("tokens: %s" % " ".join(
+            [tokenization.printable_text(x) for x in tokens_p]))
+
+        tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+        tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+        tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
 
     feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a,input_ids_b, input_mask_b, segment_ids_b, label_id)
 

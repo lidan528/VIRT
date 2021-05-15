@@ -9,6 +9,7 @@ from tensorflow.contrib.layers.python.layers import initializers
 
 import pickle
 import csv
+import json
 
 import modeling, tokenization, optimization
 import collections
@@ -78,7 +79,7 @@ flags.DEFINE_integer(
     "than this will be padded.")
 
 flags.DEFINE_integer(
-    "max_seq_length_s-bert", 256,
+    "max_seq_length_sbert", 256,
     "The maximum total input sequence length after WordPiece tokenization. "
     "In the s-bert model."
     "Sequences longer than this will be truncated, and sequences shorter "
@@ -174,14 +175,22 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids_a, input_mask_a, segment_ids_a, input_ids_b, input_mask_b, segment_ids_b, label_id):
-        self.input_ids_a = input_ids_a
-        self.input_mask_a = input_mask_a
-        self.segment_ids_a = segment_ids_a
+    def __init__(self,
+                 input_ids_sbert_a, input_mask_sbert_a, segment_ids_sbert_a,
+                 input_ids_sbert_b, input_mask_sbert_b, segment_ids_sbert_b,
+                 input_ids_bert_ab, input_mask_bert_ab, segment_ids_bert_ab,
+                 label_id):
+        self.input_ids_sbert_a = input_ids_sbert_a
+        self.input_mask_sbert_a = input_mask_sbert_a
+        self.segment_ids_sbert_a = segment_ids_sbert_a
 
-        self.input_ids_b = input_ids_b
-        self.input_mask_b = input_mask_b
-        self.segment_ids_b = segment_ids_b
+        self.input_ids_sbert_b = input_ids_sbert_b
+        self.input_mask_sbert_b = input_mask_sbert_b
+        self.segment_ids_sbert_b = segment_ids_sbert_b
+
+        self.input_ids_bert_ab = input_ids_bert_ab
+        self.input_mask_bert_ab = input_mask_bert_ab
+        self.segment_ids_bert_b = segment_ids_bert_ab
 
         self.label_id = label_id
 
@@ -281,135 +290,147 @@ class MnliProcessor(DataProcessor):
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+        self._read_jsnl(os.path.join(data_dir, "mnli-train.jsonl")), "train")
 
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")),
+        self._read_jsnl(os.path.join(data_dir, "mnli-dev.jsonl")),
         "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        self._read_jsnl(os.path.join(data_dir, "mnli-test.jsonl")), "test")
 
   def get_labels(self):
     """See base class."""
-    return ["contradiction", "entailment", "neutral"]
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1, 2]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
     examples = []
     for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
+      # if i == 0:
+      #   continue
       guid = "%s-%s" % (set_type, i)
-      text_a = tokenization.convert_to_unicode(line[0])
-      text_b = tokenization.convert_to_unicode(line[1])
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
       #if set_type == "test":
       #  label = "contradiction"
       #else:
-      label = tokenization.convert_to_unicode(line[2])
-      if label == tokenization.convert_to_unicode("contradictory"):
-        label = tokenization.convert_to_unicode("contradiction")
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
 
 
-def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
-                           tokenizer):
-    """Converts a single `InputExample` into a single `InputFeatures`."""
-    label_map = {}
-    for (i, label) in enumerate(rele_label_list):
-        label_map[label] = i
-
-    # tokens_a = tokenizer.tokenize(example.text_a)
-    # tokens_b = None
-    # if example.text_b:
-    #     tokens_b = tokenizer.tokenize(example.text_b)
-    tokens_a = tokenizer.tokenize(example.text_a)
-    tokens_b = tokenizer.tokenize(example.text_b)
-
-    if len(tokens_a) > max_seq_length - 2:
-        tokens_a = tokens_a[0:(max_seq_length - 2)]
-
-    if len(tokens_b) > max_seq_length - 2:
-        tokens_b = tokens_b[0:(max_seq_length - 2)]
-
-    # actual_a = len(tokens_a)
-    # actual_b = len(tokens_b)
-
-    # The convention in BERT is:
-    # (a) For sequence pairs:
-    #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-    #  type_ids: 0     0  0    0    0     0       0 0     1  1  1  1   1 1
-    # (b) For single sequences:
-    #  tokens:   [CLS] the dog is hairy . [SEP]
-    #  type_ids: 0     0   0   0  0     0 0
-    #
-    # Where "type_ids" are used to indicate whether this is the first
-    # sequence or the second sequence. The embedding vectors for `type=0` and
-    # `type=1` were learned during pre-training and are added to the wordpiece
-    # embedding vector (and position vector). This is not *strictly* necessary
-    # since the [SEP] token unambiguously separates the sequences, but it makes
-    # it easier for the model to learn the concept of sequences.
-    #
-    # For classification tasks, the first vector (corresponding to [CLS]) is
-    # used as as the "sentence vector". Note that this only makes sense because
-    # the entire model is fine-tuned.
-
-    def build_bert_input(tokens_temp):
-        tokens_p = []
-        segment_ids = []
-
-        tokens_p.append("[CLS]")
-        segment_ids.append(0)
-
-        for token in tokens_temp:
-            tokens_p.append(token)
-            segment_ids.append(0)
-
-        tokens_p.append("[SEP]")
-        segment_ids.append(0)
-
-        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
-        input_mask = [1] * len(input_ids)
-
-        while len(input_ids) < max_seq_length:
-            input_ids.append(0)
-            input_mask.append(0)
-            segment_ids.append(0)
-
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-
-        if ex_index < 5:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("guid: %s" % (example.guid))
-            tf.logging.info("tokens: %s" % " ".join(
-                [tokenization.printable_text(x) for x in tokens_p]))
-
-            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-
-        return input_ids, input_mask, segment_ids
-
-    input_ids_a, input_mask_a, segment_ids_a = build_bert_input(tokens_a)
-    input_ids_b, input_mask_b, segment_ids_b = build_bert_input(tokens_b)
-
-    label_id = label_map[example.label]
-
-    if ex_index < 5:
-        tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
-
-    feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a, input_ids_b, input_mask_b, segment_ids_b,
-                            label_id)
-
-    return feature
+# def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
+#                            tokenizer):
+#     """Converts a single `InputExample` into a single `InputFeatures`."""
+#     label_map = {}
+#     for (i, label) in enumerate(rele_label_list):
+#         label_map[label] = i
+#
+#     # tokens_a = tokenizer.tokenize(example.text_a)
+#     # tokens_b = None
+#     # if example.text_b:
+#     #     tokens_b = tokenizer.tokenize(example.text_b)
+#     tokens_a = tokenizer.tokenize(example.text_a)
+#     tokens_b = tokenizer.tokenize(example.text_b)
+#
+#     if len(tokens_a) > max_seq_length - 2:
+#         tokens_a = tokens_a[0:(max_seq_length - 2)]
+#
+#     if len(tokens_b) > max_seq_length - 2:
+#         tokens_b = tokens_b[0:(max_seq_length - 2)]
+#
+#     # actual_a = len(tokens_a)
+#     # actual_b = len(tokens_b)
+#
+#     # The convention in BERT is:
+#     # (a) For sequence pairs:
+#     #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+#     #  type_ids: 0     0  0    0    0     0       0 0     1  1  1  1   1 1
+#     # (b) For single sequences:
+#     #  tokens:   [CLS] the dog is hairy . [SEP]
+#     #  type_ids: 0     0   0   0  0     0 0
+#     #
+#     # Where "type_ids" are used to indicate whether this is the first
+#     # sequence or the second sequence. The embedding vectors for `type=0` and
+#     # `type=1` were learned during pre-training and are added to the wordpiece
+#     # embedding vector (and position vector). This is not *strictly* necessary
+#     # since the [SEP] token unambiguously separates the sequences, but it makes
+#     # it easier for the model to learn the concept of sequences.
+#     #
+#     # For classification tasks, the first vector (corresponding to [CLS]) is
+#     # used as as the "sentence vector". Note that this only makes sense because
+#     # the entire model is fine-tuned.
+#
+#     def build_bert_input(tokens_temp):
+#         tokens_p = []
+#         segment_ids = []
+#
+#         tokens_p.append("[CLS]")
+#         segment_ids.append(0)
+#
+#         for token in tokens_temp:
+#             tokens_p.append(token)
+#             segment_ids.append(0)
+#
+#         tokens_p.append("[SEP]")
+#         segment_ids.append(0)
+#
+#         input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
+#         input_mask = [1] * len(input_ids)
+#
+#         while len(input_ids) < max_seq_length:
+#             input_ids.append(0)
+#             input_mask.append(0)
+#             segment_ids.append(0)
+#
+#         assert len(input_ids) == max_seq_length
+#         assert len(input_mask) == max_seq_length
+#         assert len(segment_ids) == max_seq_length
+#
+#         if ex_index < 5:
+#             tf.logging.info("*** Example ***")
+#             tf.logging.info("guid: %s" % (example.guid))
+#             tf.logging.info("tokens: %s" % " ".join(
+#                 [tokenization.printable_text(x) for x in tokens_p]))
+#
+#             tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+#             tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+#             tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+#
+#         return input_ids, input_mask, segment_ids
+#
+#     input_ids_a, input_mask_a, segment_ids_a = build_bert_input(tokens_a)
+#     input_ids_b, input_mask_b, segment_ids_b = build_bert_input(tokens_b)
+#
+#     label_id = label_map[example.label]
+#
+#     if ex_index < 5:
+#         tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
+#
+#     feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a, input_ids_b, input_mask_b, segment_ids_b,
+#                             label_id)
+#
+#     return feature
 
 
 def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_bert, max_seq_length_s_bert,
@@ -428,12 +449,12 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
     #     tokens_b = tokenizer.tokenize(example.text_b)
     tokens_a = tokenizer.tokenize(example.text_a)
     tokens_b = tokenizer.tokenize(example.text_b)
-
-    if len(tokens_a) > max_seq_length_bert - 2:
-        tokens_a = tokens_a[0:(max_seq_length_bert - 2)]
-
-    if len(tokens_b) > max_seq_length_bert - 2:
-        tokens_b = tokens_b[0:(max_seq_length_bert - 2)]
+    #
+    # if len(tokens_a) > max_seq_length_bert - 2:
+    #     tokens_a = tokens_a[0:(max_seq_length_bert - 2)]
+    #
+    # if len(tokens_b) > max_seq_length_bert - 2:
+    #     tokens_b = tokens_b[0:(max_seq_length_bert - 2)]
 
     # The convention in BERT is:
     # (a) For sequence pairs:
@@ -466,41 +487,82 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
             tokens_tmp_a = tokens_tmp_a[0:max_a_len]
         if len(tokens_tmp_b) > max_b_len:
             tokens_tmp_b = tokens_tmp_b[0:max_b_len]
-        tokens_list_a, tokens_list_b = [], []
-        segment_ids_ab = []
-        tokens_list_a.append("[CLS]")
-        segment_ids_ab.append(0)
+        tokens_bert_tmp = []
+        segment_ids_bert = []
+        tokens_bert_tmp.append("[CLS]")
+        segment_ids_bert.append(0)
         for t_a in tokens_tmp_a:
-            tokens_list_a.append(t_a)
-            segment_ids_ab.append(0)
-        tokens_list_a.append("[SEP]")
-        segment_ids_ab.append(0)
-
-        input_ids_list_a = tokenizer.convert_tokens_to_ids(tokens_list_a)
-        input_masks_ab = [1]*len(input_ids_list_a)
-        while len(input_ids_list_a) < 2+max_a_len: # [CLS], a, [SEP], pad, pad, ...   to 2+max_a_len
-            input_ids_list_a.append(0)
-            input_masks_ab.append(0)
-            segment_ids_ab.append(0)
-        #---------------------------------
+            tokens_bert_tmp.append(t_a)
+            segment_ids_bert.append(0)
+        input_ids_bert = tokenizer.convert_tokens_to_ids(tokens_bert_tmp)
+        input_masks_bert = [1]*len(input_ids_bert)          # [CLS], a,a,
+        while len(input_ids_bert) < 1 + max_a_len:
+            input_ids_bert.append(0)
+            input_masks_bert.append(0)
+            segment_ids_bert.append(0)
+        tokens_bert_tmp.append("[SEP]")
+        input_ids_bert += tokenizer.convert_tokens_to_ids(["[SEP]"])     #[CLS], a,a,a,<PAD>,[SEP],
+        input_masks_bert.append(1)
+        segment_ids_bert.append(0)
+        # ---------------------------------
+        tokens_bert_tmp =[]
         for t_b in tokens_tmp_b:
-            tokens_list_b.append(t_b)
-            input_masks_ab.append(1)
-            segment_ids_ab.append(1)
-        tokens_list_b.append("[SEP]")
-        segment_ids_ab.append(1)
+            tokens_bert_tmp.append(t_b)
+            input_masks_bert.append(1)
+            segment_ids_bert.append(1)
+        input_ids_bert += tokenizer.convert_tokens_to_ids(tokens_bert_tmp)  # [CLS], a,a,a,<PAD>,[SEP], b,b,b
+        while len(input_ids_bert) <  1 + max_a_len + 1 + max_b_len:
+            input_ids_bert.append(0)
+            input_masks_bert.append(0)
+            segment_ids_bert.append(1)
+        tokens_bert_tmp.append("[SEP]")
+        input_ids_bert += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>,[SEP], b,b,b,<PAD>, [SEP]
+        input_masks_bert.append(1)
+        segment_ids_bert.append(1)
 
-        input_ids_list_b = tokenizer.convert_tokens_to_ids(tokens_list_b)
-        input_ids_list_ab = input_ids_list_a + input_ids_list_b     # [CLS], aaa, [SEP], pad... bbb, [SEP], pad...
-        while len(input_ids_list_ab) <  max_seq_length_bert:
-            input_ids_list_ab.append(0)
-            input_masks_ab.append(0)
-            segment_ids_ab.append(1)
+        assert len(input_ids_bert) == max_seq_length_bert
+        assert len(input_masks_bert) == max_seq_length_bert
+        assert len(segment_ids_bert) == max_seq_length_bert
 
-        return input_ids_list_ab, input_masks_ab, segment_ids_ab
+        return input_ids_bert, input_masks_bert, segment_ids_bert
 
+    # def build_bert_input_s_bert(tokens_temp):
+    #
+    #     if len(tokens_temp) > max_seq_length_s_bert - 2:
+    #         tokens_temp = tokens_temp[0: (max_seq_length_s_bert - 2)]
+    #
+    #     tokens_p = []
+    #     segment_ids = []
+    #
+    #     tokens_p.append("[CLS]")
+    #     segment_ids.append(0)
+    #
+    #     for token in tokens_temp:
+    #         tokens_p.append(token)
+    #         segment_ids.append(0)
+    #
+    #     tokens_p.append("[SEP]")
+    #     segment_ids.append(0)
+    #
+    #     input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
+    #     input_mask = [1] * len(input_ids)
+    #
+    #     while len(input_ids) < max_seq_length_s_bert:
+    #         input_ids.append(0)
+    #         input_mask.append(0)
+    #         segment_ids.append(0)
+    #
+    #     assert len(input_ids) == max_seq_length_s_bert
+    #     assert len(input_mask) == max_seq_length_s_bert
+    #     assert len(segment_ids) == max_seq_length_s_bert
+    #
+    #     return input_ids, input_mask, segment_ids
 
     def build_bert_input_s_bert(tokens_temp):
+
+        if len(tokens_temp) > max_seq_length_s_bert - 2:
+            tokens_temp = tokens_temp[0: (max_seq_length_s_bert - 2)]
+
         tokens_p = []
         segment_ids = []
 
@@ -510,43 +572,50 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         for token in tokens_temp:
             tokens_p.append(token)
             segment_ids.append(0)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
+        input_mask = [1] * len(input_ids)  # [CLS], a,a,a
 
-        tokens_p.append("[SEP]")
-        segment_ids.append(0)
-
-        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
-        input_mask = [1] * len(input_ids)
-
-        while len(input_ids) < max_seq_length_b:
+        while len(input_ids) < max_seq_length_s_bert-1: # [CLS], a,a,a,<PAD>,
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
+        tokens_p.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])     # [CLS], a,a,a,<PAD>, [SEP]
+        input_mask.append(1)
+        segment_ids.append(0)
 
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-
-        if ex_index < 5:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("guid: %s" % (example.guid))
-            tf.logging.info("tokens: %s" % " ".join(
-                [tokenization.printable_text(x) for x in tokens_p]))
-
-            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-
+        assert len(input_ids) == max_seq_length_s_bert
+        assert len(input_mask) == max_seq_length_s_bert
+        assert len(segment_ids) == max_seq_length_s_bert
         return input_ids, input_mask, segment_ids
 
-    input_ids_a, input_mask_a, segment_ids_a = build_bert_input_s_bert(tokens_a)
-    input_ids_b, input_mask_b, segment_ids_b = build_bert_input_s_bert(tokens_b)
+    input_ids_bert_ab, input_mask_bert_ab, segment_ids_bert_ab = build_bert_input_bert(tokens_a, tokens_b)
+    input_ids_sbert_a, input_mask_sbert_a, segment_ids_sbert_a = build_bert_input_s_bert(tokens_a)
+    input_ids_sbert_b, input_mask_sbert_b, segment_ids_sbert_b = build_bert_input_s_bert(tokens_b)
 
     label_id = label_map[example.label]
 
-    if ex_index < 5:
-        tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
+    if ex_index < 2:
+        tf.logging.info("*** Example ***")
+        tf.logging.info("guid: %s" % (example.guid))
+        tf.logging.info("tokens: %s" % " ".join(
+            [tokenization.printable_text(x) for x in ["[CLS]"]+tokens_a+["[SEP]"]+tokens_b+["[SEP]"]]))
 
-    feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a, input_ids_b, input_mask_b, segment_ids_b,
+        tf.logging.info("input_ids_bert_ab: %s" % " ".join([str(x) for x in input_ids_bert_ab]))
+        tf.logging.info("input_mask_bert_ab: %s" % " ".join([str(x) for x in input_mask_bert_ab]))
+        tf.logging.info("segment_ids_bert_ab: %s" % " ".join([str(x) for x in segment_ids_bert_ab]))
+        tf.logging.info("-------------------------------------------------------------------------------")
+        tf.logging.info("input_ids_sbert_a: %s" % " ".join([str(x) for x in input_ids_sbert_a]))
+        tf.logging.info("input_mask_sbert_a: %s" % " ".join([str(x) for x in input_mask_sbert_a]))
+        tf.logging.info("segment_ids_sbert_a: %s" % " ".join([str(x) for x in segment_ids_sbert_a]))
+        tf.logging.info("-------------------------------------------------------------------------------")
+        tf.logging.info("input_ids_sbert_b: %s" % " ".join([str(x) for x in input_ids_sbert_b]))
+        tf.logging.info("input_mask_sbert_b: %s" % " ".join([str(x) for x in input_mask_sbert_b]))
+        tf.logging.info("segment_ids_sbert_b: %s" % " ".join([str(x) for x in segment_ids_sbert_b]))
+
+    feature = InputFeatures(input_ids_sbert_a, input_mask_sbert_a, segment_ids_sbert_a,
+                            input_ids_sbert_b, input_mask_sbert_b, segment_ids_sbert_b,
+                            input_ids_bert_ab, input_mask_bert_ab, segment_ids_bert_ab,
                             label_id)
 
     return feature
@@ -554,7 +623,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
 
 
 def file_based_convert_examples_to_features(
-        examples, label_list, max_seq_length, tokenizer, output_file, is_training=False):
+        examples, label_list, max_seq_length_bert, max_seq_length_s_bert, tokenizer, output_file, is_training=False):
     """Convert a set of `InputExample`s to a TFRecord file."""
 
     writer = tf.python_io.TFRecordWriter(output_file)
@@ -568,8 +637,8 @@ def file_based_convert_examples_to_features(
         if ex_index % 10000 == 0:
             tf.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
 
-        feature = convert_single_example(ex_index, example, label_list,
-                                         max_seq_length, tokenizer)
+        feature = conver_single_example_distill(ex_index, example, label_list,
+                                         max_seq_length_bert, max_seq_length_s_bert, tokenizer)
 
         if not feature:
             continue
@@ -579,13 +648,17 @@ def file_based_convert_examples_to_features(
             return f
 
         features = collections.OrderedDict()
-        features["input_ids_a"] = create_int_feature(feature.input_ids_a)
-        features["input_mask_a"] = create_int_feature(feature.input_mask_a)
-        features["segment_ids_a"] = create_int_feature(feature.segment_ids_a)
+        features["input_ids_sbert_a"] = create_int_feature(feature.input_ids_sbert_a)
+        features["input_mask_sbert_a"] = create_int_feature(feature.input_mask_sbert_a)
+        features["segment_ids_sbert_a"] = create_int_feature(feature.segment_ids_sbert_a)
 
-        features["input_ids_b"] = create_int_feature(feature.input_ids_b)
-        features["input_mask_b"] = create_int_feature(feature.input_mask_b)
-        features["segment_ids_b"] = create_int_feature(feature.segment_ids_b)
+        features["input_ids_sbert_b"] = create_int_feature(feature.input_ids_sbert_b)
+        features["input_mask_sbert_b"] = create_int_feature(feature.input_mask_sbert_b)
+        features["segment_ids_sbert_b"] = create_int_feature(feature.segment_ids_sbert_b)
+
+        features["input_ids_bert_ab"] = create_int_feature(feature.input_ids_bert_ab)
+        features["input_mask_bert_ab"] = create_int_feature(feature.input_mask_bert_ab)
+        features["segment_ids_bert_ab"] = create_int_feature(feature.segment_ids_bert_ab)
 
         features["label_ids"] = create_int_feature([feature.label_id])
 
@@ -596,18 +669,24 @@ def file_based_convert_examples_to_features(
     tf.logging.info("proprecessd actual number of tfrecord: {0}".format(count))
 
 
-def file_based_input_fn_builder(input_file, seq_length, is_training,
+def file_based_input_fn_builder(input_file, seq_length_bert, seq_length_sbert,
+                                is_training,
                                 drop_remainder):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
     name_to_features = {
-        "input_ids_a": tf.FixedLenFeature([seq_length], tf.int64),
-        "input_mask_a": tf.FixedLenFeature([seq_length], tf.int64),
-        "segment_ids_a": tf.FixedLenFeature([seq_length], tf.int64),
+        "input_ids_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "input_mask_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "segment_ids_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
 
-        "input_ids_b": tf.FixedLenFeature([seq_length], tf.int64),
-        "input_mask_b": tf.FixedLenFeature([seq_length], tf.int64),
-        "segment_ids_b": tf.FixedLenFeature([seq_length], tf.int64),
+        "input_ids_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "input_mask_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "segment_ids_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+
+        "input_ids_bert_ab": tf.FixedLenFeature([seq_length_bert], tf.int64),
+        "input_mask_bert_ab": tf.FixedLenFeature([seq_length_bert], tf.int64),
+        "segment_ids_bert_ab": tf.FixedLenFeature([seq_length_bert], tf.int64),
+
         "label_ids": tf.FixedLenFeature([], tf.int64),
     }
 
@@ -938,14 +1017,16 @@ def main(_):
             print("train file exists")
         else:
             file_based_convert_examples_to_features(
-                train_examples, label_list, FLAGS.max_seq_length, tokenizer, train_file, is_training=True)
+                train_examples, label_list, FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                tokenizer, train_file, is_training=True)
         tf.logging.info("***** Running training *****")
         tf.logging.info("  Num examples = %d", len(train_examples))
         tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
         tf.logging.info("  Num steps = %d", num_train_steps)
         train_input_fn = file_based_input_fn_builder(
             input_file=train_file,
-            seq_length=FLAGS.max_seq_length,
+            seq_length_bert=FLAGS.max_seq_length_bert,
+            seq_length_sbert=FLAGS.max_seq_length_sbert,
             is_training=True,
             drop_remainder=True)
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
@@ -956,7 +1037,8 @@ def main(_):
 
         if not tf.gfile.Exists(eval_file):
             file_based_convert_examples_to_features(
-                eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
+                eval_examples, label_list, FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                tokenizer, eval_file)
         else:
             print("eval file exists")
 
@@ -976,7 +1058,8 @@ def main(_):
         eval_drop_remainder = True if FLAGS.use_tpu else False
         eval_input_fn = file_based_input_fn_builder(
             input_file=eval_file,
-            seq_length=FLAGS.max_seq_length,
+            seq_length_bert=FLAGS.max_seq_length_bert,
+            seq_length_sbert=FLAGS.max_seq_length_sbert,
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
@@ -1002,7 +1085,9 @@ def main(_):
         predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
 
         if not tf.gfile.Exists(predict_file):
-            file_based_convert_examples_to_features(predict_examples, label_list, FLAGS.max_seq_length, tokenizer,
+            file_based_convert_examples_to_features(predict_examples, label_list,
+                                                    FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                                                    tokenizer,
                                                     predict_file)
         else:
             print("predict file Exists")
@@ -1019,7 +1104,8 @@ def main(_):
         predict_drop_remainder = True if FLAGS.use_tpu else False
         predict_input_fn = file_based_input_fn_builder(
             input_file=predict_file,
-            seq_length=FLAGS.max_seq_length,
+            seq_length_bert=FLAGS.max_seq_length_bert,
+            seq_length_sbert=FLAGS.max_seq_length_sbert,
             is_training=False,
             drop_remainder=predict_drop_remainder)
 
