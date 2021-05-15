@@ -741,17 +741,33 @@ def file_based_input_fn_builder(input_file, seq_length_bert, seq_length_sbert,
 #             tokens_a.pop()
 #         else:
 #             tokens_b.pop()
-
-
-def create_model(bert_config, is_training, input_ids, input_mask,
-                 segment_ids, use_one_hot_embeddings):
+def create_model_bert(bert_config, is_training, input_ids, input_mask,
+                      segment_ids, use_one_hot_embeddings, scope, is_reuse):
+    """Creates a classification model."""
     model = modeling.BertModel(
         config=bert_config,
         is_training=is_training,
         input_ids=input_ids,
         input_mask=input_mask,
         token_type_ids=segment_ids,
-        use_one_hot_embeddings=use_one_hot_embeddings)
+        use_one_hot_embeddings=use_one_hot_embeddings,
+        scope=scope,
+        is_reuse=is_reuse)
+    output_layer = model.get_pooled_output()
+    return (output_layer, model)
+
+
+def create_model_sbert(bert_config, is_training, input_ids, input_mask,
+                       segment_ids, use_one_hot_embeddings, scope, is_reuse):
+    model = modeling.BertModel(
+        config=bert_config,
+        is_training=is_training,
+        input_ids=input_ids,
+        input_mask=input_mask,
+        token_type_ids=segment_ids,
+        use_one_hot_embeddings=use_one_hot_embeddings,
+        scope=scope,
+        is_reuse=is_reuse)
 
     output_layer = None
 
@@ -803,33 +819,78 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
         if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
-            input_ids_a = features["input_ids_a"]
-            input_mask_a = features["input_mask_a"]
-            segment_ids_a = features["segment_ids_a"]
-            input_ids_b = features["input_ids_b"]
-            input_mask_b = features["input_mask_b"]
-            segment_ids_b = features["segment_ids_b"]
+            input_ids_sbert_a = features["input_ids_sbert_a"]
+            input_mask_sbert_a = features["input_mask_sbert_a"]
+            segment_ids_sbert_a = features["segment_ids_sbert_a"]
+
+            input_ids_sbert_b = features["input_ids_sbert_b"]
+            input_mask_sbert_b = features["input_mask_sbert_b"]
+            segment_ids_sbert_b = features["segment_ids_sbert_b"]
+
+            input_ids_bert_ab = features["input_ids_bert_ab"]
+            input_mask_bert_ab = features["input_mask_bert_ab"]
+            segment_ids_bert_ab = features["segment_ids_bert_ab"]
             label_ids = features["label_ids"]
-            query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
-                                           use_one_hot_embeddings)
-            doc_embedding, _ = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b,
-                                         use_one_hot_embeddings)
-        else:
-            input_ids_a = features["input_ids_a"]
-            input_mask_a = features["input_mask_a"]
-            segment_ids_a = features["segment_ids_a"]
-            query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
-                                           use_one_hot_embeddings)
-            doc_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
-                                         use_one_hot_embeddings)
-            label_ids = 0
+            query_embedding, model_stu_q = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                    input_ids = input_ids_sbert_a,
+                                                    input_mask = input_mask_sbert_a,
+                                                    segment_ids= segment_ids_sbert_a,
+                                                    use_one_hot_embeddings = use_one_hot_embeddings,
+                                                    scope = "bert_student",
+                                                    is_reuse = False)
+            doc_embedding, model_stu_d = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                    input_ids = input_ids_sbert_b,
+                                                    input_mask = input_mask_sbert_b,
+                                                    segment_ids= segment_ids_sbert_b,
+                                                    use_one_hot_embeddings = use_one_hot_embeddings,
+                                                    scope = "bert_student",
+                                                    is_reuse = True)
+
+        # else:
+        #     input_ids_a = features["input_ids_a"]
+        #     input_mask_a = features["input_mask_a"]
+        #     segment_ids_a = features["segment_ids_a"]
+        #     query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
+        #                                    use_one_hot_embeddings)
+        #     doc_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
+        #                                  use_one_hot_embeddings)
+        #     label_ids = 0
         # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
         #    query_id = features["id"]
-
         sub_embedding = tf.abs(query_embedding - doc_embedding)
         max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
-
         regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
+        logits_student, probabilities_student, log_probs_student = \
+            get_prediction_student(student_output_layer=regular_embedding,
+                                   num_labels=num_rele_label,
+                                   is_training=is_training)
+        vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
+
+
+        teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=is_training,
+                                                    input_ids = input_ids_bert_ab,
+                                                    input_mask = input_mask_bert_ab,
+                                                    segment_ids= segment_ids_bert_ab,
+                                                    use_one_hot_embeddings = use_one_hot_embeddings,
+                                                    scope = "bert_teacher",
+                                                    is_reuse = False)
+        loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
+            get_prediction_teacher(teacher_output_layer=teacher_output_layer,
+                                   num_labels=num_rele_label,
+                                   labels=label_ids,
+                                   is_training=False)
+
+        vars_teacher = tf.trainable_variables()             # stu + teacher
+        for var_ in vars_student:
+            vars_student.remove(var_)
+        # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
+
+
+
+
+
+
+
         logits = tf.layers.dense(regular_embedding, units=num_rele_label)
         probabilities = tf.nn.softmax(logits, axis=-1)
         log_probs = tf.nn.log_softmax(logits, axis=-1)
@@ -916,6 +977,76 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         return output_spec
 
     return model_fn
+
+
+def get_prediction_teacher(teacher_output_layer, num_labels, labels, is_training):
+    """
+    获取教师模型的输出，同时在定义命名空间时，需要想好教师模型加载训练好的模型的定义
+    由于教师模型<classifier_bert_bipartition>在训练时,
+    -------------------------------------------------------------------------------
+                 | ckpt保存的参数名       |       计算图中的参数名
+    --------------------------------------------------------------------------------
+    BERT层参数    |   bert/....          |      bert_teacher/....
+    --------------------------------------------------------------------------------
+    上层分类器参数 | output_weights,_bias |      cls_teacher/output_weights, _bias
+    ----------------------------------------------------------------------------------
+    """
+    hidden_size = teacher_output_layer.shape[-1].value
+    with tf.variable_scope("cls_teacher"):
+
+        output_weights = tf.get_variable(
+            "output_weights", [num_labels, hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        output_bias = tf.get_variable(
+            "output_bias", [num_labels], initializer=tf.zeros_initializer())
+
+        if is_training:
+            teacher_output_layer = tf.nn.dropout(teacher_output_layer, keep_prob=0.9)
+
+        logits = tf.matmul(teacher_output_layer, output_weights, transpose_b=True)
+        logits = tf.nn.bias_add(logits, output_bias)
+        probabilities = tf.nn.softmax(logits, axis=-1)
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+
+        one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
+        per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
+        loss = tf.reduce_mean(per_example_loss)
+
+        return (loss, per_example_loss, logits, probabilities)
+
+
+def get_prediction_student(student_output_layer, num_labels, is_training):
+    """
+    获取学生模型的输出, 同时在定义命名空间时，需要想好学生模型加载BERT原始参数的对应
+    -------------------------------------------------------------------------------------------
+                 | bert_base的ckpt保存的参数名       |       计算图中的参数名
+    -------------------------------------------------------------------------------------------
+    BERT层参数    |   bert/....                     |      bert_student/....
+    --------------------------------------------------------------------------------------------
+    上层分类器参数 |      暂无，因此无需加载           |      cls_student/output_weights, _bias
+    --------------------------------------------------------------------------------------------
+    """
+    hidden_size = student_output_layer.shape[-1].value
+    with tf.variable_scope("cls_student"):
+        output_weights = tf.get_variable(
+            "output_weights", [num_labels, hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        output_bias = tf.get_variable(
+            "output_bias", [num_labels], initializer=tf.zeros_initializer())
+
+        if is_training:
+            student_output_layer = tf.nn.dropout(student_output_layer, keep_prob=0.9)
+
+        logits = tf.matmul(student_output_layer, output_weights, transpose_b=True)
+        logits = tf.nn.bias_add(logits, output_bias)
+        probabilities = tf.nn.softmax(logits, axis=-1)
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+
+    return logits, probabilities, log_probs
+
+
 
 
 def serving_input_receiver_fn(max_seq_length):
