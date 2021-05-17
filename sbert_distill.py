@@ -911,8 +911,10 @@ def model_fn_builder(bert_config,
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
+        t_value_distribution = tf.distributions.Categorical(probs=logits_teacher)
+        s_value_distribution = tf.distributions.Categorical(probs=logits_student)
 
-        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(logits_student, logits_teacher))
+        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
 
         # logits = tf.layers.dense(regular_embedding, units=num_rele_label)
         # probabilities = tf.nn.softmax(logits, axis=-1)
@@ -1076,6 +1078,12 @@ def get_prediction_student(student_output_layer, num_labels, is_training):
 
     return logits, probabilities, log_probs
 
+
+def kl(p, q):
+    """
+    计算kl散度
+    """
+    p_q = p / q
 
 
 
