@@ -976,9 +976,11 @@ def model_fn_builder(bert_config,
                 scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
-            def metric_fn(per_example_loss, label_ids, probabilities):
+            def metric_fn(per_example_loss, label_ids, probabilities, probabilities_teacher):
                 predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
+                predictions_teacher = tf.argmax(probabilities_teacher, axis=-1, output_type=tf.int32)
                 accuracy = tf.metrics.accuracy(label_ids, predictions)
+                accuracy_teacher = tf.metrics.accuracy(label_ids, predictions_teacher)
                 precision = tf.metrics.precision(label_ids, predictions)
                 recall = tf.metrics.recall(label_ids, predictions)
                 # f1 = tf.metrics.f1(label_ids, predictions, num_rele_label, [1], average="macro")
@@ -992,10 +994,11 @@ def model_fn_builder(bert_config,
                     "eval_rec": recall,
                     #   "eval_f1": f1,
                     "eval_accuracy": accuracy,
+                    "eval_accuracy_teacher": accuracy_teacher,
                     "eval_auc": auc,
                 }
 
-            eval_metrics = (metric_fn, [total_loss, label_ids, probabilities_student])
+            eval_metrics = (metric_fn, [total_loss, label_ids, probabilities_student, probabilities_teacher])
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
