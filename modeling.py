@@ -412,7 +412,7 @@ def get_assignment_map_from_checkpoint_student(tvars, init_checkpoint):
   assignment_map = collections.OrderedDict()
   for x in init_vars:
     (name, var) = (x[0], x[1])
-    graph_bert_name = 'bert_student/'+name[:4]
+    graph_bert_name = 'bert_student/'+name[4:]
     if graph_bert_name in name_to_variable:
       assignment_map[name] = graph_bert_name
       initialized_variable_names[name] = 1
