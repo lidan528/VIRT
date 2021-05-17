@@ -414,7 +414,7 @@ def get_assignment_map_from_checkpoint_student(tvars, init_checkpoint):
   for x in init_vars:
     (name, var) = (x[0], x[1])
     print('**name:', name)
-    graph_bert_name = 'bert_student/'+name[4:]
+    graph_bert_name = 'bert_student'+name[4:]
     print('**add bert name:', graph_bert_name)
     if graph_bert_name in name_to_variable:
       assignment_map[name] = graph_bert_name
