@@ -357,8 +357,8 @@ def get_assignment_map_from_checkpoint_teacher(tvars, init_checkpoint):
     # name_to_variable: 计算图中的参数名, bert_teacher/...;   cls_teacher/...
 
   print('---------------------teacher graph params:-----------------------')
-  for var in tvars:
-    print(var)
+  for var, n_t_v in zip(tvars, name_to_variable):
+    print(var, '-----', n_t_v)
   print("----------------------------------------------------------------")
 
   init_vars = tf.train.list_variables(init_checkpoint)
