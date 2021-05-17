@@ -596,20 +596,22 @@ def create_model(bert_config, is_training, input_ids, input_mask,
         # delete cls and sep
         #a = tf.cast(tf.reduce_sum(input_mask, axis=-1) - 1, tf.int32)
         #last = tf.one_hot(a, depth=FLAGS.max_seq_length)
-
         #b = tf.zeros([tf.shape(input_ids)[0]], tf.int32)
         #first = tf.one_hot(b, depth=FLAGS.max_seq_length)
         #input_mask_sub2 = tf.cast(input_mask, dtype=tf.float32)
         #input_mask_sub2 = input_mask_sub2 - first - last
-
         #input_mask3 = tf.cast(tf.reshape(input_mask_sub2, [-1, FLAGS.max_seq_length, 1]), tf.float32)
         #output_layer = output_layer * input_mask3
 
-        #average pooling
-        #length = tf.reduce_sum(input_mask3, axis=1)
-        token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
-        #output_layer = token_embedding_sum/length
-        output_layer = token_embedding_sum/FLAGS.max_seq_length
+
+        # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
+        # output_layer = token_embedding_sum/FLAGS.max_seq_length
+        mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+        masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
+        actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
+        output_layer = sum_masked_output_layer / actual_token_nums
     else:
         tf.logging.info("pooling_strategy error")
         assert 1==2

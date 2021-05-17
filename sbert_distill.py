@@ -811,11 +811,11 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
 
 
         # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
-        mask = tf.expand_dims(input_mask, axis=-1)      # mask: [bs_size, max_len, 1]
-        actual_token_nums = tf.reduce_sum(input_mask, axis=-1)      # [bs_size]
-        actual_token_nums = tf.expand_dims(actual_token_nums, axis=-1)      #[bs_size, 1]
+        mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)     # mask: [bs_size, max_len, 1]
         masked_output_layer = mask * output_layer       # [bs_size, max_len, emb_dim]
         sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)    # [bs_size, emb_dim]
+        actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)# [bs_size, 1]
         output_layer = sum_masked_output_layer / actual_token_nums
 
         # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
