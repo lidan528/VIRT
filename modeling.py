@@ -402,10 +402,10 @@ def get_assignment_map_from_checkpoint_student(tvars, init_checkpoint):
     name_to_variable[name] = var
     # name_to_variable: 计算图中的参数名, bert_student/...;   cls_student/...
 
-  print('---------------------student graph params:-----------------------')
-  for var, n_t_v in zip(tvars, name_to_variable):
-      print(var, '-----', n_t_v)
-  print("----------------------------------------------------------------")
+  # print('---------------------student graph params:-----------------------')
+  # for var, n_t_v in zip(tvars, name_to_variable):
+  #     print(var, '-----', n_t_v)
+  # print("----------------------------------------------------------------")
 
   init_vars = tf.train.list_variables(init_checkpoint)
     # init_vars: ckpt中的参数名, bert/...;   只有bert需要初始化
@@ -413,9 +413,9 @@ def get_assignment_map_from_checkpoint_student(tvars, init_checkpoint):
   assignment_map = collections.OrderedDict()
   for x in init_vars:
     (name, var) = (x[0], x[1])
-    print('**name:', name)
+    # print('**name:', name)
     graph_bert_name = 'bert_student'+name[4:]
-    print('**add bert name:', graph_bert_name)
+    # print('**add bert name:', graph_bert_name)
     if graph_bert_name in name_to_variable:
       assignment_map[name] = graph_bert_name
       initialized_variable_names[name] = 1
