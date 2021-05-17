@@ -926,7 +926,7 @@ def model_fn_builder(bert_config,
 
         total_loss = regular_loss_stu
         if FLAGS.use_kd_logit:
-            total_loss = regular_loss_stu + FLAGS.kd_weight * distill_loss_logit
+            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
 
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
