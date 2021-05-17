@@ -204,7 +204,7 @@ class InputFeatures(object):
 
         self.input_ids_bert_ab = input_ids_bert_ab
         self.input_mask_bert_ab = input_mask_bert_ab
-        self.segment_ids_bert_b = segment_ids_bert_ab
+        self.segment_ids_bert_ab = segment_ids_bert_ab
 
         self.label_id = label_id
 
