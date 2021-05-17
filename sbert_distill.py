@@ -894,7 +894,7 @@ def model_fn_builder(bert_config,
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
 
-        teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=is_training,
+        teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
                                                     input_ids = input_ids_bert_ab,
                                                     input_mask = input_mask_bert_ab,
                                                     segment_ids= segment_ids_bert_ab,
