@@ -572,7 +572,7 @@ def file_based_input_fn_builder(input_file, seq_length, is_training,
 
 
 def create_model(bert_config, is_training, input_ids, input_mask,
-                 segment_ids, use_one_hot_embeddings):
+                 segment_ids, use_one_hot_embeddings, is_reuse):
     
     model = modeling.BertModel(
         config=bert_config,
@@ -582,7 +582,7 @@ def create_model(bert_config, is_training, input_ids, input_mask,
         token_type_ids=segment_ids,
         use_one_hot_embeddings=use_one_hot_embeddings,
         scope="bert",
-        is_reuse=True
+        is_reuse=is_reuse
     )
 
     output_layer = None
@@ -644,14 +644,14 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_b = features["input_mask_b"]
             segment_ids_b = features["segment_ids_b"]
             label_ids = features["label_ids"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings)
-            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, False)
+            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings, True)
         else:
             input_ids_a = features["input_ids_a"]
             input_mask_a = features["input_mask_a"]
             segment_ids_a = features["segment_ids_a"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings)
-            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, False)
+            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, True)
             label_ids = 0
            # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
             #    query_id = features["id"]
