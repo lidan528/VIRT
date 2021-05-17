@@ -808,8 +808,9 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
 
         # average pooling
         # length = tf.reduce_sum(input_mask3, axis=1)
+
+
         # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
-        # masked_output_layer = output_layer * input_mask
         mask = tf.expand_dims(input_mask, axis=-1)      # mask: [bs_size, max_len, 1]
         actual_token_nums = tf.reduce_sum(input_mask, axis=-1)      # [bs_size]
         actual_token_nums = tf.expand_dims(actual_token_nums, axis=-1)      #[bs_size, 1]
