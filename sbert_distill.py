@@ -864,14 +864,14 @@ def model_fn_builder(bert_config,
                                                     segment_ids= segment_ids_sbert_a,
                                                     use_one_hot_embeddings = use_one_hot_embeddings,
                                                     scope = "bert_student",
-                                                    is_reuse = False)
+                                                    is_reuse = tf.AUTO_REUSE)
             doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                     input_ids = input_ids_sbert_b,
                                                     input_mask = input_mask_sbert_b,
                                                     segment_ids= segment_ids_sbert_b,
                                                     use_one_hot_embeddings = use_one_hot_embeddings,
                                                     scope = "bert_student",
-                                                    is_reuse = True)
+                                                    is_reuse = tf.AUTO_REUSE)
 
         # else:
         #     input_ids_a = features["input_ids_a"]
@@ -900,7 +900,7 @@ def model_fn_builder(bert_config,
                                                     segment_ids= segment_ids_bert_ab,
                                                     use_one_hot_embeddings = use_one_hot_embeddings,
                                                     scope = "bert_teacher",
-                                                    is_reuse = False)
+                                                    is_reuse = tf.AUTO_REUSE)
         loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
             get_prediction_teacher(teacher_output_layer=teacher_output_layer,
                                    num_labels=num_rele_label,
