@@ -10,7 +10,7 @@ export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert
 python sbert_distill.py \
   --task_name=mnli \
   --pooling_strategy=mean \
-  --do_train=false \
+  --do_train=true \
   --do_eval=true \
   --do_predict=false \
   --data_dir=$MY_DATASET \

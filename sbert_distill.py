@@ -911,22 +911,19 @@ def model_fn_builder(bert_config,
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
-        t_value_distribution = tf.distributions.Categorical(probs=logits_teacher)
-        s_value_distribution = tf.distributions.Categorical(probs=logits_student)
+        # t_value_distribution = tf.distributions.Categorical(probs=logits_teacher)
+        # s_value_distribution = tf.distributions.Categorical(probs=logits_student)
+        #
+        # distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
 
-        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
-
-        # logits = tf.layers.dense(regular_embedding, units=num_rele_label)
-        # probabilities = tf.nn.softmax(logits, axis=-1)
-        # log_probs = tf.nn.log_softmax(logits, axis=-1)
 
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
         per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
         regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
 
         total_loss = regular_loss_stu
-        if FLAGS.use_kd_logit:
-            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
+        # if FLAGS.use_kd_logit:
+        #     total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
 
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
