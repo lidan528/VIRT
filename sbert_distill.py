@@ -63,7 +63,11 @@ flags.DEFINE_string(
 ## Other parameters
 
 flags.DEFINE_string(
-    "init_checkpoint", None,
+    "init_checkpoint_teacher", None,
+    "Initial checkpoint for teacher.")
+
+flags.DEFINE_string(
+    "init_checkpoint_student", None,
     "Initial checkpoint (usually from a pre-trained BERT model).")
 
 flags.DEFINE_bool(
@@ -72,18 +76,28 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length_bert", 128,
+    "max_seq_length_bert", 130,
     "The maximum total input sequence length after WordPiece tokenization. "
     "In the origin bert model"
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
 
 flags.DEFINE_integer(
-    "max_seq_length_sbert", 256,
+    "max_seq_length_sbert", 259,
     "The maximum total input sequence length after WordPiece tokenization. "
     "In the s-bert model."
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
+
+flags.DEFINE_float(
+    "kd_weight_logit", 0.4,
+    "The weight loss of kd logits."
+)
+
+flags.DEFINE_bool(
+    "use_kd_logit", False,
+    "Whether to use logit distillations"
+)
 
 flags.DEFINE_integer("log_step_count_steps", 50, "output log every x steps")
 flags.DEFINE_bool("do_train", False, "Whether to run training.")
@@ -804,7 +818,10 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
     return output_layer, model
 
 
-def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate,
+def model_fn_builder(bert_config,
+                     num_rele_label,
+                     init_checkpoint_teacher, init_checkpoint_student,
+                     learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
@@ -831,14 +848,14 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_bert_ab = features["input_mask_bert_ab"]
             segment_ids_bert_ab = features["segment_ids_bert_ab"]
             label_ids = features["label_ids"]
-            query_embedding, model_stu_q = create_model_sbert(bert_config=bert_config, is_training=is_training,
+            query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                     input_ids = input_ids_sbert_a,
                                                     input_mask = input_mask_sbert_a,
                                                     segment_ids= segment_ids_sbert_a,
                                                     use_one_hot_embeddings = use_one_hot_embeddings,
                                                     scope = "bert_student",
                                                     is_reuse = False)
-            doc_embedding, model_stu_d = create_model_sbert(bert_config=bert_config, is_training=is_training,
+            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                     input_ids = input_ids_sbert_b,
                                                     input_mask = input_mask_sbert_b,
                                                     segment_ids= segment_ids_sbert_b,
@@ -882,66 +899,69 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
 
         vars_teacher = tf.trainable_variables()             # stu + teacher
         for var_ in vars_student:
-            vars_student.remove(var_)
-        # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
+            vars_teacher.remove(var_)
 
 
+        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(logits_student, logits_teacher))
 
-
-
-
-
-        logits = tf.layers.dense(regular_embedding, units=num_rele_label)
-        probabilities = tf.nn.softmax(logits, axis=-1)
-        log_probs = tf.nn.log_softmax(logits, axis=-1)
+        # logits = tf.layers.dense(regular_embedding, units=num_rele_label)
+        # probabilities = tf.nn.softmax(logits, axis=-1)
+        # log_probs = tf.nn.log_softmax(logits, axis=-1)
 
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-        per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
-        regular_loss = tf.reduce_mean(per_example_loss)
+        per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
+        regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
 
-        # (ner_loss, _, _, pred_ids) = ner_part
-        # (rele_loss, per_example_loss, _, probabilities) = rele_part
+        total_loss = regular_loss_stu
+        if FLAGS.use_kd_logit:
+            total_loss = regular_loss_stu + FLAGS.kd_weight * distill_loss_logit
 
-        total_loss = regular_loss
-        # total_loss = rele_loss
-        # total_loss = 0.1*ner_loss + rele_loss
 
-        tvars = tf.trainable_variables()
+        # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
+        # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
+        assignment_map_teacher, initialized_variable_names_teacher = \
+            modeling.get_assignment_map_from_checkpoint_teacher(
+                vars_teacher, init_checkpoint_teacher
+            )
+        tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
 
-        scaffold_fn = None
-        initialized_variable_names = None
-        if init_checkpoint:
-            (assignment_map, initialized_variable_names
-             ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            if use_tpu:
+        assignment_map_student, initialized_variable_names_student = \
+            modeling.get_assignment_map_from_checkpoint_student(
+                vars_student, init_checkpoint_student
+            )
+        tf.train.init_from_checkpoint(init_checkpoint_student, assignment_map_student)
 
-                def tpu_scaffold():
-                    tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-                    return tf.train.Scaffold()
+        print('****-------------------------init teacher----------------------*****')
+        for v_t in assignment_map_teacher:
+            print('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
+        print('--------------------------------------------------------------------')
 
-                scaffold_fn = tpu_scaffold
-            else:
-                tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+        print('****-------------------------init student----------------------*****')
+        for v_s in assignment_map_student:
+            print('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
+        print('--------------------------------------------------------------------')
 
-        tf.logging.info("**** Trainable Variables ****")
-        for var in tvars:
-            init_string = ""
-            if var.name in initialized_variable_names:
-                init_string = ", *INIT_FROM_CKPT*"
-            tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
-                            init_string)
-
+        #
+        # tvars = tf.trainable_variables()
+        #
+        # tf.logging.info("**** Trainable Variables ****")
+        # for var in tvars:
+        #     init_string = ""
+        #     if var.name in initialized_variable_names:
+        #         init_string = ", *INIT_FROM_CKPT*"
+        #     tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
+        #                     init_string)
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
 
             train_op = optimization.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
 
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                scaffold_fn=scaffold_fn)
+                scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
             def metric_fn(per_example_loss, label_ids, probabilities):
@@ -963,17 +983,17 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
                     "eval_auc": auc,
                 }
 
-            eval_metrics = (metric_fn, [per_example_loss, label_ids, probabilities])
+            eval_metrics = (metric_fn, [total_loss, label_ids, probabilities_student])
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 eval_metrics=eval_metrics,
-                scaffold_fn=scaffold_fn)
+                scaffold_fn=None)
         else:
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 predictions=query_embedding,
-                scaffold_fn=scaffold_fn)
+                scaffold_fn=None)
         return output_spec
 
     return model_fn
@@ -1074,7 +1094,7 @@ def main(_):
 
     bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
-    if FLAGS.max_seq_length > bert_config.max_position_embeddings:
+    if FLAGS.max_seq_length_bert > bert_config.max_position_embeddings:
         raise ValueError(
             "Cannot use sequence length %d because the BERT model "
             "was only trained up to sequence length %d" %
@@ -1122,7 +1142,8 @@ def main(_):
     model_fn = model_fn_builder(
         bert_config=bert_config,
         num_rele_label=len(label_list),
-        init_checkpoint=FLAGS.init_checkpoint,
+        init_checkpoint_teacher=FLAGS.init_checkpoint_teacher,
+        init_checkpoint_student=FLAGS.init_checkpoint_student,
         learning_rate=FLAGS.learning_rate,
         num_train_steps=num_train_steps,
         num_warmup_steps=num_warmup_steps,
@@ -1271,4 +1292,10 @@ if __name__ == "__main__":
     flags.mark_flag_as_required("vocab_file")
     flags.mark_flag_as_required("bert_config_file")
     flags.mark_flag_as_required("output_dir")
+    flags.mark_flag_as_required("kd_weight_logit")
+    flags.mark_flag_as_required("use_kd_logit")
+    flags.mark_flag_as_required("max_seq_length_bert")
+    flags.mark_flag_as_required("max_seq_length_sbert")
+    flags.mark_flag_as_required("init_checkpoint_teacher")
+    flags.mark_flag_as_required("init_checkpoint_student")
     tf.app.run()

@@ -342,6 +342,77 @@ def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
   return (assignment_map, initialized_variable_names)
 
 
+def get_assignment_map_from_checkpoint_teacher(tvars, init_checkpoint):
+  """Compute the union of the current variables and checkpoint variables."""
+  assignment_map = {}
+  initialized_variable_names = {}
+
+  name_to_variable = collections.OrderedDict()
+  for var in tvars:
+    name = var.name
+    m = re.match("^(.*):\\d+$", name)
+    if m is not None:
+      name = m.group(1)
+    name_to_variable[name] = var
+    # name_to_variable: 计算图中的参数名, bert_teacher/...;   cls_teacher/...
+
+  init_vars = tf.train.list_variables(init_checkpoint)
+    # init_vars: ckpt中的参数名, bert/...; ...
+
+  assignment_map = collections.OrderedDict()
+  for x in init_vars:
+    (name, var) = (x[0], x[1])
+    graph_cls_name = 'cls_teacher'+name
+    graph_bert_name = 'bert_teacher'+name[:4]
+    if graph_cls_name in name_to_variable:
+      assignment_map[name] = graph_cls_name
+      initialized_variable_names[name] = 1
+      initialized_variable_names[name + ":0"] = 1
+    elif graph_bert_name in name_to_variable:
+      assignment_map[name] = graph_bert_name
+      initialized_variable_names[name] = 1
+      initialized_variable_names[name + ":0"] = 1
+    elif name in name_to_variable:
+      assignment_map[name] = name
+      initialized_variable_names[name] = 1
+      initialized_variable_names[name + ":0"] = 1
+
+  return (assignment_map, initialized_variable_names)
+
+
+def get_assignment_map_from_checkpoint_student(tvars, init_checkpoint):
+  """Compute the union of the current variables and checkpoint variables."""
+  assignment_map = {}
+  initialized_variable_names = {}
+
+  name_to_variable = collections.OrderedDict()
+  for var in tvars:
+    name = var.name
+    m = re.match("^(.*):\\d+$", name)
+    if m is not None:
+      name = m.group(1)
+    name_to_variable[name] = var
+    # name_to_variable: 计算图中的参数名, bert_student/...;   cls_student/...
+
+  init_vars = tf.train.list_variables(init_checkpoint)
+    # init_vars: ckpt中的参数名, bert/...;   只有bert需要初始化
+
+  assignment_map = collections.OrderedDict()
+  for x in init_vars:
+    (name, var) = (x[0], x[1])
+    graph_bert_name = 'bert_student'+name[:4]
+    if graph_bert_name in name_to_variable:
+      assignment_map[name] = graph_bert_name
+      initialized_variable_names[name] = 1
+      initialized_variable_names[name + ":0"] = 1
+    elif name in name_to_variable:
+      assignment_map[name] = name
+      initialized_variable_names[name] = 1
+      initialized_variable_names[name + ":0"] = 1
+
+  return (assignment_map, initialized_variable_names)
+
+
 def dropout(input_tensor, dropout_prob):
   """Perform dropout.
 
