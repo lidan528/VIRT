@@ -23,7 +23,7 @@ python sbert_distill.py \
   --train_batch_size=64 \
   --learning_rate=1e-5 \
   --test_flie_name=None \
-  --num_train_epochs=0.1 \
+  --num_train_epochs=0.001 \
   --do_save=false \
   --output_dir=$OUTPUT \
   --use_kd_logit=true \
