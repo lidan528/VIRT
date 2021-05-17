@@ -21,7 +21,7 @@ python sbert_distill.py \
   --max_seq_length_bert=259 \
   --max_seq_length_sbert=130 \
   --train_batch_size=64 \
-  --learning_rate=5e-5 \
+  --learning_rate=1e-5 \
   --test_flie_name=None \
   --num_train_epochs=5.0 \
   --do_save=false \
