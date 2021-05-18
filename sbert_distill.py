@@ -1027,12 +1027,12 @@ def get_prediction_teacher(teacher_output_layer, num_labels, labels, is_training
     with tf.variable_scope("cls_teacher"):
 
         output_weights = tf.get_variable(
-            "output_weights", [num_labels, hidden_size],)
-            # initializer=tf.truncated_normal_initializer(stddev=0.02))
+            "output_weights", [num_labels, hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
 
         output_bias = tf.get_variable(
-            "output_bias", [num_labels], )
-            # initializer=tf.zeros_initializer())
+            "output_bias", [num_labels],
+            initializer=tf.zeros_initializer())
 
         if is_training:
             teacher_output_layer = tf.nn.dropout(teacher_output_layer, keep_prob=0.9)
