@@ -1234,7 +1234,8 @@ def main(_):
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
-        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps, checkpoint_path=os.path.join(FLAGS.output_dir, 'model.ckpt-400'))
+        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+                                    # , checkpoint_path=os.path.join(FLAGS.output_dir, 'model.ckpt-400'))
 
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
         with tf.gfile.GFile(output_eval_file, "w") as writer:
