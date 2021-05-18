@@ -95,8 +95,13 @@ flags.DEFINE_float(
 )
 
 flags.DEFINE_bool(
-    "use_kd_logit", False,
-    "Whether to use logit distillations"
+    "use_kd_logit_mse", False,
+    "Whether to use logit kl distillations"
+)
+
+flags.DEFINE_bool(
+    "use_kd_logit_kl", False,
+    "Whether to use logit mse distillations"
 )
 
 flags.DEFINE_integer("log_step_count_steps", 50, "output log every x steps")
@@ -911,21 +916,20 @@ def model_fn_builder(bert_config,
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
-        # t_value_distribution = tf.distributions.Categorical(probs=logits_teacher + 1e-5)
-        # s_value_distribution = tf.distributions.Categorical(probs=logits_student + 1e-5)
-        #
-        # distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
-        distill_loss_logit = tf.losses.mean_squared_error(logits_teacher, logits_student)
-
-
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
         per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
         regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
 
         total_loss = regular_loss_stu
-        if FLAGS.use_kd_logit:
-            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
-
+        if FLAGS.use_kd_logit_mse:
+            distill_loss_logit_mse = tf.losses.mean_squared_error(logits_teacher, logits_student)
+            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_mse
+        elif FLAGS.use_kd_logit_kl:
+            t_value_distribution = tf.distributions.Categorical(probs=probabilities_teacher + 1e-5)
+            s_value_distribution = tf.distributions.Categorical(probs=probabilities_student + 1e-5)
+            distill_loss_logit_kl = tf.reduce_mean(
+                tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
+            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_kl
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
@@ -1314,7 +1318,8 @@ if __name__ == "__main__":
     flags.mark_flag_as_required("bert_config_file")
     flags.mark_flag_as_required("output_dir")
     flags.mark_flag_as_required("kd_weight_logit")
-    flags.mark_flag_as_required("use_kd_logit")
+    flags.mark_flag_as_required("use_kd_logit_mse")
+    flags.mark_flag_as_required("use_kd_logit_kl")
     flags.mark_flag_as_required("max_seq_length_bert")
     flags.mark_flag_as_required("max_seq_length_sbert")
     flags.mark_flag_as_required("init_checkpoint_teacher")

@@ -203,7 +203,8 @@ class BertModel(object):
 
         # Run the stacked transformer.
         # `sequence_output` shape = [batch_size, seq_length, hidden_size].
-        self.all_encoder_layers = transformer_model(
+        self.all_encoder_layers, self.all_attention_scores_before_mask, \
+        self.all_attention_probs_ori, self.all_q_w_4d, self.all_k_w_4d = transformer_model(
             input_tensor=self.embedding_output,
             attention_mask=attention_mask,
             hidden_size=config.hidden_size,
@@ -760,7 +761,7 @@ def attention_layer(from_tensor,
   # `key_layer` = [B*T, N*H]
   key_layer = tf.layers.dense(
       to_tensor_2d,
-      num_attention_heads * size_per_head,
+      num_attention_heads * size_per_head,  #12 * 64 in bert_base
       activation=key_act,
       name="key",
       kernel_initializer=create_initializer(initializer_range))
@@ -773,24 +774,30 @@ def attention_layer(from_tensor,
       name="value",
       kernel_initializer=create_initializer(initializer_range))
 
+  # q_w_2d, k_w_2d = query_layer, key_layer       #[bs * seq_len, emb_dim]
+
   # `query_layer` = [B, N, F, H]
   query_layer = transpose_for_scores(query_layer, batch_size,
                                      num_attention_heads, from_seq_length,
-                                     size_per_head)
+                                     size_per_head)         #[bs * seq_len, num_heads * head_dim] --> [bs, num_heads, seq_len, head_dim]
 
   # `key_layer` = [B, N, T, H]
   key_layer = transpose_for_scores(key_layer, batch_size, num_attention_heads,
-                                   to_seq_length, size_per_head)
+                                   to_seq_length, size_per_head)    #[bs * seq_len, num_heads * head_dim] --> [bs, num_heads, seq_len, head_dim]
+
+  q_w_4d, k_w_4d = query_layer, key_layer   # [Bs, Num_head, seq_len, head_dim]
 
   # Take the dot product between "query" and "key" to get the raw
   # attention scores.
   # `attention_scores` = [B, N, F, T]
-  attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
+  attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)        #[bs, num_heads, seq_len, seq_len]
   attention_scores = tf.multiply(attention_scores,
                                  1.0 / math.sqrt(float(size_per_head)))
 
+  attention_scores_before_mask = attention_scores               #[bs, num_heads, seq_len, seq_len]
+
   if attention_mask is not None:
-    # `attention_mask` = [B, 1, F, T]
+    # `attention_mask` = [B, 1, F, T]       [bs, seq_len, seq_len]
     attention_mask = tf.expand_dims(attention_mask, axis=[1])
 
     # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -800,15 +807,16 @@ def attention_layer(from_tensor,
 
     # Since we are adding it to the raw scores before the softmax, this is
     # effectively the same as removing these entirely.
-    attention_scores += adder
+    # attention_scores += adder
+    attention_scores = attention_scores + adder
 
   # Normalize the attention scores to probabilities.
   # `attention_probs` = [B, N, F, T]
-  attention_probs = tf.nn.softmax(attention_scores)
+  attention_probs_ori = tf.nn.softmax(attention_scores)
 
   # This is actually dropping out entire tokens to attend to, which might
   # seem a bit unusual, but is taken from the original Transformer paper.
-  attention_probs = dropout(attention_probs, attention_probs_dropout_prob)
+  attention_probs = dropout(attention_probs_ori, attention_probs_dropout_prob)
 
   # `value_layer` = [B, T, N, H]
   value_layer = tf.reshape(
@@ -835,7 +843,7 @@ def attention_layer(from_tensor,
         context_layer,
         [batch_size, from_seq_length, num_attention_heads * size_per_head])
 
-  return context_layer
+  return context_layer, attention_scores_before_mask, attention_probs_ori, q_w_4d, k_w_4d
 
 
 def transformer_model(input_tensor,
@@ -907,9 +915,13 @@ def transformer_model(input_tensor,
   # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
   # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
   # help the optimizer.
-  prev_output = reshape_to_matrix(input_tensor)
+  prev_output = reshape_to_matrix(input_tensor)     #[bs, seq_len, dim] --> [bs * seq_len, dim]
 
   all_layer_outputs = []
+  all_attention_scores_before_mask = []
+  all_attention_probs_ori = []
+  all_q_w_4d = []
+  all_k_w_4d = []
   for layer_idx in range(num_hidden_layers):
     with tf.variable_scope("layer_%d" % layer_idx):
       layer_input = prev_output
@@ -917,7 +929,8 @@ def transformer_model(input_tensor,
       with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
-          attention_head = attention_layer(
+          attention_head, attention_scores_before_mask, attention_probs_ori,\
+              q_w_4d, k_w_4d= attention_layer(
               from_tensor=layer_input,
               to_tensor=layer_input,
               attention_mask=attention_mask,
@@ -930,6 +943,10 @@ def transformer_model(input_tensor,
               from_seq_length=seq_length,
               to_seq_length=seq_length)
           attention_heads.append(attention_head)
+          all_attention_scores_before_mask.append(attention_scores_before_mask)
+          all_attention_probs_ori.append(attention_probs_ori)
+          all_q_w_4d.append(q_w_4d)
+          all_k_w_4d.append(k_w_4d)
 
         attention_output = None
         if len(attention_heads) == 1:
@@ -973,10 +990,10 @@ def transformer_model(input_tensor,
     for layer_output in all_layer_outputs:
       final_output = reshape_from_matrix(layer_output, input_shape)
       final_outputs.append(final_output)
-    return final_outputs
+    return final_outputs, all_attention_scores_before_mask, all_attention_probs_ori, all_q_w_4d, all_k_w_4d
   else:
     final_output = reshape_from_matrix(prev_output, input_shape)
-    return final_output
+    return final_output, all_attention_scores_before_mask, all_attention_probs_ori, all_q_w_4d, all_k_w_4d
 
 
 def get_shape_list(tensor, expected_rank=None, name=None):
