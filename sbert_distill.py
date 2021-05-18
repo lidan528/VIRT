@@ -911,10 +911,11 @@ def model_fn_builder(bert_config,
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
-        t_value_distribution = tf.distributions.Categorical(probs=logits_teacher + 1e-5)
-        s_value_distribution = tf.distributions.Categorical(probs=logits_student + 1e-5)
-
-        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
+        # t_value_distribution = tf.distributions.Categorical(probs=logits_teacher + 1e-5)
+        # s_value_distribution = tf.distributions.Categorical(probs=logits_student + 1e-5)
+        #
+        # distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
+        distill_loss_logit = tf.losses.mean_squared_error(logits_teacher, logits_student)
 
 
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
