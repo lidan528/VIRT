@@ -20,7 +20,7 @@ python sbert_distill.py \
   --init_checkpoint_student=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length_bert=259 \
   --max_seq_length_sbert=130 \
-  --train_batch_size=64 \
+  --train_batch_size=32 \
   --learning_rate=5e-5 \
   --test_flie_name=None \
   --num_train_epochs=5 \
