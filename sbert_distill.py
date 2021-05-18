@@ -911,10 +911,10 @@ def model_fn_builder(bert_config,
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
-        # t_value_distribution = tf.distributions.Categorical(probs=logits_teacher)
-        # s_value_distribution = tf.distributions.Categorical(probs=logits_student)
-        #
-        # distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
+        t_value_distribution = tf.distributions.Categorical(probs=logits_teacher + 1e-5)
+        s_value_distribution = tf.distributions.Categorical(probs=logits_student + 1e-5)
+
+        distill_loss_logit = tf.reduce_mean(tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
 
 
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
@@ -922,8 +922,8 @@ def model_fn_builder(bert_config,
         regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
 
         total_loss = regular_loss_stu
-        # if FLAGS.use_kd_logit:
-        #     total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
+        if FLAGS.use_kd_logit:
+            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit
 
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
@@ -940,15 +940,15 @@ def model_fn_builder(bert_config,
             )
         tf.train.init_from_checkpoint(init_checkpoint_student, assignment_map_student)
 
-        print('****-------------------------init teacher----------------------*****')
+        tf.logging.info('****-------------------------init teacher----------------------*****')
         for v_t in assignment_map_teacher:
-            print('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
-        print('--------------------------------------------------------------------')
+            tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
+        tf.logging.info('--------------------------------------------------------------------')
 
-        print('****-------------------------init student----------------------*****')
+        tf.logging.info('****-------------------------init student----------------------*****')
         for v_s in assignment_map_student:
-            print('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
-        print('--------------------------------------------------------------------')
+            tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
+        tf.logging.info('--------------------------------------------------------------------')
 
         #
         # tvars = tf.trainable_variables()
