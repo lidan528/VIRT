@@ -90,17 +90,17 @@ flags.DEFINE_integer(
     "than this will be padded.")
 
 flags.DEFINE_float(
-    "kd_weight_logit", 0.4,
+    "kd_weight_logit", None,
     "The weight loss of kd logits."
 )
 
 flags.DEFINE_bool(
-    "use_kd_logit_mse", False,
+    "use_kd_logit_mse", None,
     "Whether to use logit kl distillations"
 )
 
 flags.DEFINE_bool(
-    "use_kd_logit_kl", False,
+    "use_kd_logit_kl", None,
     "Whether to use logit mse distillations"
 )
 
@@ -131,7 +131,7 @@ flags.DEFINE_float(
     "Proportion of training to perform linear learning rate warmup for. "
     "E.g., 0.1 = 10% of training.")
 
-flags.DEFINE_integer("save_checkpoints_steps", 200,
+flags.DEFINE_integer("save_checkpoints_steps", 500,
                      "How often to save the model checkpoint.")
 
 flags.DEFINE_integer("iterations_per_loop", 1000,
@@ -919,17 +919,21 @@ def model_fn_builder(bert_config,
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
         per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
         regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-
+        tf.summary.scalar("regular loss", regular_loss_stu)
         total_loss = regular_loss_stu
         if FLAGS.use_kd_logit_mse:
+            tf.logging.info('use mse of logits as distill object...')
             distill_loss_logit_mse = tf.losses.mean_squared_error(logits_teacher, logits_student)
             total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_mse
+            tf.summary.scalar("logit_loss_mse", distill_loss_logit_mse)
         elif FLAGS.use_kd_logit_kl:
+            tf.logging.info('use KL- of logits as distill object...')
             t_value_distribution = tf.distributions.Categorical(probs=probabilities_teacher + 1e-5)
             s_value_distribution = tf.distributions.Categorical(probs=probabilities_student + 1e-5)
             distill_loss_logit_kl = tf.reduce_mean(
                 tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
             total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_kl
+            tf.summary.scalar("logit_loss_kl", distill_loss_logit_kl)
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
@@ -1149,6 +1153,7 @@ def main(_):
         master=FLAGS.master,
         model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
+        keep_checkpoint_max = 50,
         tpu_config=tf.contrib.tpu.TPUConfig(
             iterations_per_loop=FLAGS.iterations_per_loop,
             num_shards=FLAGS.num_tpu_cores,
