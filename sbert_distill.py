@@ -930,7 +930,7 @@ def model_fn_builder(bert_config,
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
         per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
         regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-        tf.summary.scalar("regular loss", regular_loss_stu)
+        tf.summary.scalar("regular_loss", regular_loss_stu)
         total_loss = regular_loss_stu
         if FLAGS.use_kd_logit_mse:
             tf.logging.info('use mse of logits as distill object...')
@@ -943,8 +943,10 @@ def model_fn_builder(bert_config,
             s_value_distribution = tf.distributions.Categorical(probs=probabilities_student + 1e-5)
             distill_loss_logit_kl = tf.reduce_mean(
                 tf.distributions.kl_divergence(t_value_distribution, s_value_distribution))
-            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_kl
+            scaled_logit_loss = FLAGS.kd_weight_logit * distill_loss_logit_kl
+            total_loss = regular_loss_stu + scaled_logit_loss
             tf.summary.scalar("logit_loss_kl", distill_loss_logit_kl)
+            tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
 
         ## attention loss
         if FLAGS.use_kd_att:
@@ -954,8 +956,11 @@ def model_fn_builder(bert_config,
                                                   model_teacher=model_teacher,
                                                   input_mask_sbert_query=input_mask_sbert_a,
                                                   input_mask_sbert_doc=input_mask_sbert_b)
-            total_loss = total_loss + FLAGS.kd_weight_att * distill_loss_att
+            scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
+            total_loss = total_loss + scaled_att_loss
             tf.summary.scalar("att_loss", distill_loss_att)
+            tf.summary.scalar("att_loss_scaled", scaled_att_loss)
+
 
 
 

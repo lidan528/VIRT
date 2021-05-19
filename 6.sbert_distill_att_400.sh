@@ -30,5 +30,5 @@ python sbert_distill.py \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0 \
   --use_kd_att=true \
-  --kd_weight_att=120
+  --kd_weight_att=400
 
