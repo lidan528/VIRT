@@ -201,6 +201,8 @@ class BertModel(object):
         attention_mask = create_attention_mask_from_input_mask(
             input_ids, input_mask)
 
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
         # Run the stacked transformer.
         # `sequence_output` shape = [batch_size, seq_length, hidden_size].
         self.all_encoder_layers, self.all_attention_scores_before_mask, \
@@ -619,10 +621,12 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
   Returns:
     float Tensor of shape [batch_size, from_seq_length, to_seq_length].
   """
+  # from tensor: [bs, seq_len]
   from_shape = get_shape_list(from_tensor, expected_rank=[2, 3])
   batch_size = from_shape[0]
   from_seq_length = from_shape[1]
 
+  # input_mask: [bs, seq_len] ,  need: [bs, seq_len, seq_len](在attention中广播成[bs, 1(heads), seq_len, seq_len])
   to_shape = get_shape_list(to_mask, expected_rank=2)
   to_seq_length = to_shape[1]
 
