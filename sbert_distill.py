@@ -1138,15 +1138,15 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
     获取交互的attention loss
     """
     tea_all_att_scores_before_mask, tea_all_att_probs_ori, \
-    tea_all_q_w_4d, tea_all_k_w_4d = model_teacher.all_attention_scores_before_mask, model_teacher.tea_all_attention_probs_ori, \
+    tea_all_q_w_4d, tea_all_k_w_4d = model_teacher.all_attention_scores_before_mask, model_teacher.all_attention_probs_ori, \
                                      model_teacher.all_q_w_4d, model_teacher.all_k_w_4d
 
     stu_qu_all_att_scores_before_mask, stu_qu_all_att_probs_ori, \
-    stu_qu_all_q_w_4d, stu_qu_all_k_w_4d = model_student_query.all_attention_scores_before_mask, model_student_query.tea_all_attention_probs_ori, \
+    stu_qu_all_q_w_4d, stu_qu_all_k_w_4d = model_student_query.all_attention_scores_before_mask, model_student_query.all_attention_probs_ori, \
                                      model_student_query.all_q_w_4d, model_student_query.all_k_w_4d
 
     stu_do_all_att_scores_before_mask, stu_do_all_att_probs_ori, \
-    stu_do_all_q_w_4d, stu_do_all_k_w_4d = model_student_doc.all_attention_scores_before_mask, model_student_doc.tea_all_attention_probs_ori, \
+    stu_do_all_q_w_4d, stu_do_all_k_w_4d = model_student_doc.all_attention_scores_before_mask, model_student_doc.all_attention_probs_ori, \
                                      model_student_doc.all_q_w_4d, model_student_doc.all_k_w_4d
 
     size_per_head =  int(model_teacher.hidden_size / model_teacher.num_attention_heads)
