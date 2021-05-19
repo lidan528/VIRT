@@ -1256,18 +1256,26 @@ def main(_):
 
         steps_and_files = sorted(steps_and_files, key=lambda x:x[0])
 
+        best_metric, best_ckpt = 0, ''
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
         with tf.gfile.GFile(output_eval_file, "w") as writer:
             for global_step, filename in steps_and_files:
                 result = estimator.evaluate(input_fn=eval_input_fn,
                                             # steps=eval_steps)
                                             checkpoint_path=filename)
+                cur_acc = result["eval_accuracy"]
+                if cur_acc > best_metric:
+                    best_metric = cur_acc
+                    best_ckpt = filename
                 tf.logging.info("***** Eval results of step-{} *****".format(global_step))
                 writer.write("***** Eval results of step-{} *****".format(global_step))
                 for key in sorted(result.keys()):
                     if key.startswith("eval"):
                         tf.logging.info("  %s = %s", key, str(result[key]))
                         writer.write("%s = %s\n" % (key, str(result[key])))
+
+        tf.logging.info("*****Best eval results: {} from {}  *****".format(best_metric, best_ckpt))
+
             # pre = result["eval_pre"]
             # rec = result["eval_rec"]
             # if pre == 0 and rec == 0:
