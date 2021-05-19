@@ -949,7 +949,7 @@ def model_fn_builder(bert_config,
         ## attention loss
         if FLAGS.use_kd_att:
             tf.logging.info('use att as distill object...')
-            distill_loss_att = get_attention_loss(model_stu_query=model_stu_query,
+            distill_loss_att = get_attention_loss(model_student_query=model_stu_query,
                                                   model_student_doc=model_stu_doc,
                                                   model_teacher=model_teacher,
                                                   input_mask_sbert_query=input_mask_sbert_a,
