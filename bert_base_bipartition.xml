@@ -34,7 +34,7 @@
     </property>
     <property>
         <name>worker.script.workdir</name>
-        <value>distill</value>
+        <value>python</value>
     </property>
     <property>
         <name>args.vocab_file</name>
