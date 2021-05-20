@@ -28,4 +28,6 @@ python sbert_distill.py \
   --output_dir=$OUTPUT \
   --use_kd_logit_kl=false \
   --use_kd_logit_mse=true \
-  --kd_weight_logit=0.4
+  --kd_weight_logit=0.4 \
+  --use_kd_att=false \
+  --kd_weight_att=0
