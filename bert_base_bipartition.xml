@@ -34,7 +34,7 @@
     </property>
     <property>
         <name>worker.script.workdir</name>
-        <value>python</value>
+        <value>./</value>
     </property>
     <property>
         <name>args.vocab_file</name>
