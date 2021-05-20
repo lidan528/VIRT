@@ -58,7 +58,7 @@
     </property>
     <property>
         <name>args.train_data_path</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_aspect/output/ad_all_seq512e1/train.tf_record</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition/mnlitrain.tf_record</value>
     </property>
     <property>
         <name>args.eval_data_path</name>
@@ -78,7 +78,7 @@
     </property>
     <property>
         <name>board.log_dir</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_aspect/output/ad_all_seq512e1</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool/</value>
     </property>
     <property>
         <name>afo.role.worker.exit-with-chief</name>
