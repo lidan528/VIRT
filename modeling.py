@@ -136,7 +136,7 @@ class BertModel(object):
                token_type_ids=None,
                use_one_hot_embeddings=False,
                scope="bert",
-               is_reuse=True):
+               is_reuse=tf.AUTO_REUSE):
     """Constructor for BertModel.
 
     Args:
