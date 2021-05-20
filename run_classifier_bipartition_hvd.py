@@ -133,6 +133,11 @@ flags.DEFINE_integer(
     "num_tpu_cores", 8,
     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 
+flags.DEFINE_string(
+    "pooling_strategy", None,
+    "cls or mean"
+)
+
 
 class InputExample(object):
   """A single training/test example for simple sequence classification."""
@@ -805,7 +810,38 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
   #
   # If you want to use the token-level output, use model.get_sequence_output()
   # instead.
-  output_layer = model.get_pooled_output()
+  # output_layer = model.get_pooled_output()
+  if FLAGS.pooling_strategy == "cls":
+      tf.logging.info("use cls embedding")
+      output_layer = model.get_pooled_output()
+
+  elif FLAGS.pooling_strategy == "mean":
+      tf.logging.info("use mean embedding")
+
+      output_layer = model.get_sequence_output()
+
+    # delete cls and sep
+    # a = tf.cast(tf.reduce_sum(input_mask, axis=-1) - 1, tf.int32)
+    # last = tf.one_hot(a, depth=FLAGS.max_seq_length)
+
+    # b = tf.zeros([tf.shape(input_ids)[0]], tf.int32)
+    # first = tf.one_hot(b, depth=FLAGS.max_seq_length)
+    # input_mask_sub2 = tf.cast(input_mask, dtype=tf.float32)
+    # input_mask_sub2 = input_mask_sub2 - first - last
+
+    # input_mask3 = tf.cast(tf.reshape(input_mask_sub2, [-1, FLAGS.max_seq_length, 1]), tf.float32)
+    # output_layer = output_layer * input_mask3
+
+    # average pooling
+    # length = tf.reduce_sum(input_mask3, axis=1)
+
+    # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
+      mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+      masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+      sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
+      actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+      actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
+      output_layer = sum_masked_output_layer / actual_token_nums
 
   hidden_size = output_layer.shape[-1].value
 
@@ -1065,7 +1101,7 @@ def main(_):
       cluster=tpu_cluster_resolver,
       master=FLAGS.master,
       model_dir=FLAGS.output_dir,
-      keep_checkpoint_max=50,
+      keep_checkpoint_max=100,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps if hvd.rank==0 else None,
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
@@ -1260,4 +1296,5 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("output_dir")
   flags.mark_flag_as_required("train_data_path")
+  flags.mark_flag_as_required("pooling_strategy")
   tf.app.run()
