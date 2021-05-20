@@ -16,3 +16,4 @@ python run_classifier_bipartition.py \
   --learning_rate=5e-5 \
   --num_train_epochs=3.0 \
   --output_dir=$OUTPUT \
+  --pooling_strategy=mean
