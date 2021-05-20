@@ -6,7 +6,7 @@
     </property>
     <property>
         <name>afo.app.queue</name>
-        <value>root.zw03_training.hadoop-search.training</value>
+        <value>root.zw03_training.hadoop-aipnlp.eight_gpu</value>
     </property>
     <property>
         <name>mpi.network.protocol</name>
