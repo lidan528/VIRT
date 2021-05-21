@@ -6,7 +6,7 @@
     </property>
     <property>
         <name>afo.app.queue</name>
-        <value>root.zw03_training.hadoop-aipnlp.training</value>
+        <value>root.zw03_training.hadoop-search.training</value>
     </property>
     <property>
         <name>mpi.network.protocol</name>
@@ -14,15 +14,15 @@
     </property>
     <property>
         <name>workers</name>
-        <value>3</value>
+        <value>1</value>
     </property>
     <property>
         <name>worker.memory</name>
-        <value>50000</value>
+        <value>54576</value>
     </property>
     <property>
         <name>worker.gcores32g</name>
-        <value>2</value>
+        <value>3</value>
     </property>
     <property>
         <name>worker.vcore</name>
@@ -30,7 +30,7 @@
     </property>
     <property>
         <name>worker.script</name>
-        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_len=259 --train_batch_size=16 --learning_rate=2.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
+        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_len=259 --train_batch_size=32 --learning_rate=2.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
     </property>
     <property>
         <name>worker.script.workdir</name>

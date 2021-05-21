@@ -937,7 +937,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         )
       else:
         broadcast_hook = hvd.BroadcastGlobalVariablesHook(0)
-        output_spec = output_spec = tf.estimator.EstimatorSpec(
+        output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
           training_hooks=[broadcast_hook],
