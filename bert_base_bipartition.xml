@@ -22,7 +22,7 @@
     </property>
     <property>
         <name>worker.gcores32g</name>
-        <value>1</value>
+        <value>4</value>
     </property>
     <property>
         <name>worker.vcore</name>
@@ -30,7 +30,7 @@
     </property>
     <property>
         <name>worker.script</name>
-        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_length=259 --train_batch_size=32 --learning_rate=2.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
+        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_length=259 --train_batch_size=32 --learning_rate=4.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
     </property>
     <property>
         <name>worker.script.workdir</name>
@@ -50,7 +50,7 @@
     </property>
     <property>
         <name>args.output_dir</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_single/</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_multi/</value>
     </property>
     <property>
         <name>args.data_dir</name>
@@ -78,7 +78,7 @@
     </property>
     <property>
         <name>board.log_dir</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_single/</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_multi/</value>
     </property>
     <property>
         <name>afo.role.worker.exit-with-chief</name>
