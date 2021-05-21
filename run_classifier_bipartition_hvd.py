@@ -766,7 +766,7 @@ def distribute_based_input_fn_builder(total_size,
       d = d.repeat()
       d = d.shuffle(buffer_size=100)
 
-    assert d == None
+    # assert d == None
 
     d = d.apply(
       tf.contrib.data.map_and_batch(
