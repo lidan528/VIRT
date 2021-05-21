@@ -18,7 +18,7 @@
     </property>
     <property>
         <name>worker.memory</name>
-        <value>54576</value>
+        <value>30000</value>
     </property>
     <property>
         <name>worker.gcores32g</name>
