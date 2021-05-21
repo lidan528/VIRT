@@ -334,7 +334,7 @@ class MnliProcessor(DataProcessor):
 
   def _read_jsnl(self, jsn_file):
       lines = []
-      with open(jsn_file, 'r', encoding='utf-8') as fp:
+      with open(jsn_file, 'r') as fp:
           for line in fp:
               line = line.strip()
               if line:
@@ -722,7 +722,7 @@ def distribute_based_input_fn_builder(total_size,
     "input_mask": tf.FixedLenFeature([seq_length], tf.int64),
     "segment_ids": tf.FixedLenFeature([seq_length], tf.int64),
     "label_ids": tf.FixedLenFeature([], tf.int64),
-    "is_real_example": tf.FixedLenFeature([], tf.int64)
+    "is_real_example": tf.FixedLenFeature([], tf.int64),
   }
 
   def _decode_record(record, name_to_features):
@@ -765,6 +765,8 @@ def distribute_based_input_fn_builder(total_size,
     if is_training:
       d = d.repeat()
       d = d.shuffle(buffer_size=100)
+
+    assert d == None
 
     d = d.apply(
       tf.contrib.data.map_and_batch(
