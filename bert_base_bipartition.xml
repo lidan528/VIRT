@@ -22,7 +22,7 @@
     </property>
     <property>
         <name>worker.gcores32g</name>
-        <value>2</value>
+        <value>1</value>
     </property>
     <property>
         <name>worker.vcore</name>
