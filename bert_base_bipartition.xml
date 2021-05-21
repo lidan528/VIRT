@@ -50,7 +50,7 @@
     </property>
     <property>
         <name>args.output_dir</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool/</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_single/</value>
     </property>
     <property>
         <name>args.data_dir</name>
@@ -78,7 +78,7 @@
     </property>
     <property>
         <name>board.log_dir</name>
-        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool/</value>
+        <value>/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool_single/</value>
     </property>
     <property>
         <name>afo.role.worker.exit-with-chief</name>
