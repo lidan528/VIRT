@@ -935,8 +935,10 @@ def model_fn_builder(bert_config,
         if FLAGS.use_kd_logit_mse:
             tf.logging.info('use mse of logits as distill object...')
             distill_loss_logit_mse = tf.losses.mean_squared_error(logits_teacher, logits_student)
-            total_loss = regular_loss_stu + FLAGS.kd_weight_logit * distill_loss_logit_mse
+            scaled_logit_loss = FLAGS.kd_weight_logit * distill_loss_logit_mse
+            total_loss = regular_loss_stu + scaled_logit_loss
             tf.summary.scalar("logit_loss_mse", distill_loss_logit_mse)
+            tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
         elif FLAGS.use_kd_logit_kl:
             tf.logging.info('use KL- of logits as distill object...')
             t_value_distribution = tf.distributions.Categorical(probs=probabilities_teacher + 1e-5)
