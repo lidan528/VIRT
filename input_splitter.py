@@ -105,6 +105,8 @@ def input_evenly_builder(total_size, file_size, total_workers, worker_index):
     if 0 < examples_mod_left <= worker_index:
         final_dataset = final_dataset.concatenate(final_dataset.take(1))
 
+    assert final_dataset == None
+
     return final_dataset
 
 
