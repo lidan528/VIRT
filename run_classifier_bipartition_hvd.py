@@ -66,7 +66,7 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length", 128,
+    "max_seq_length", None,
     "The maximum total input sequence length after WordPiece tokenization. "
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
@@ -1295,6 +1295,7 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
   flags.mark_flag_as_required("task_name")
   flags.mark_flag_as_required("vocab_file")
+  flags.mark_flag_as_required("max_seq_length")
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("output_dir")
   flags.mark_flag_as_required("train_data_path")

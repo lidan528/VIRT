@@ -30,7 +30,7 @@
     </property>
     <property>
         <name>worker.script</name>
-        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_len=259 --train_batch_size=32 --learning_rate=2.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
+        <value>python run_classifier_bipartition_hvd.py --pooling_strategy=mean --task_name=mnli --do_train=true --do_eval=true --do_predict=false --max_seq_length=259 --train_batch_size=32 --learning_rate=2.0E-5 --num_train_epochs=5 --save_checkpoints_steps=500</value>
     </property>
     <property>
         <name>worker.script.workdir</name>
