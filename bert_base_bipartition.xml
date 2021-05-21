@@ -14,7 +14,7 @@
     </property>
     <property>
         <name>workers</name>
-        <value>2</value>
+        <value>3</value>
     </property>
     <property>
         <name>worker.memory</name>
