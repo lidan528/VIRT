@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_att_120/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_att_300/
 python sbert_distill.py \
   --task_name=mnli \
   --pooling_strategy=mean \
@@ -30,5 +30,5 @@ python sbert_distill.py \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0 \
   --use_kd_att=true \
-  --kd_weight_att=400
+  --kd_weight_att=300
 
