@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 #export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
@@ -6,11 +6,11 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_kl_att_0.4_100/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_kl_att_300/
 python sbert_distill.py \
   --task_name=mnli \
   --pooling_strategy=mean \
-  --do_train=true \
+  --do_train=false \
   --do_eval=true \
   --do_predict=false \
   --data_dir=$MY_DATASET \
@@ -26,9 +26,9 @@ python sbert_distill.py \
   --num_train_epochs=6 \
   --do_save=false \
   --output_dir=$OUTPUT \
-  --use_kd_logit_kl=true \
+  --use_kd_logit_kl=false \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.4 \
   --use_kd_att=true \
-  --kd_weight_att=100
+  --kd_weight_att=300
 
