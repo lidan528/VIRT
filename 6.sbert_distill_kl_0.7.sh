@@ -29,6 +29,6 @@ python sbert_distill.py \
   --use_kd_logit_kl=true \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.7 \
-  --use_kd_att=fasle \
+  --use_kd_att=false \
   --kd_weight_att=0
 
