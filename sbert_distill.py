@@ -968,11 +968,11 @@ def model_fn_builder(bert_config,
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
-        # assignment_map_teacher, initialized_variable_names_teacher = \
-        #     modeling.get_assignment_map_from_checkpoint_teacher(
-        #         vars_teacher, init_checkpoint_teacher
-        #     )
-        # tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
+        assignment_map_teacher, initialized_variable_names_teacher = \
+            modeling.get_assignment_map_from_checkpoint_teacher(
+                vars_teacher, init_checkpoint_teacher
+            )
+        tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
 
         assignment_map_student, initialized_variable_names_student = \
             modeling.get_assignment_map_from_checkpoint_student(
@@ -980,10 +980,10 @@ def model_fn_builder(bert_config,
             )
         tf.train.init_from_checkpoint(init_checkpoint_student, assignment_map_student)
 
-        # tf.logging.info('****-------------------------init teacher----------------------*****')
-        # for v_t in assignment_map_teacher:
-        #     tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
-        # tf.logging.info('--------------------------------------------------------------------')
+        tf.logging.info('****-------------------------init teacher----------------------*****')
+        for v_t in assignment_map_teacher:
+            tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
+        tf.logging.info('--------------------------------------------------------------------')
 
         tf.logging.info('****-------------------------init student----------------------*****')
         for v_s in assignment_map_student:
