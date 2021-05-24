@@ -362,10 +362,15 @@ def get_assignment_map_from_checkpoint_teacher(tvars, init_checkpoint):
 
   init_vars = tf.train.list_variables(init_checkpoint)
     # init_vars: ckpt中的参数名, bert/...; ...
-  # print('---------------------teacher ckpt params:-----------------------')
-  # for var in init_vars:
-  #   print(var)
-  # print("----------------------------------------------------------------")
+  print('---------------------teacher ckpt params:-----------------------')
+  for var in init_vars:
+    print(var)
+  print("----------------------------------------------------------------")
+  print("****************************************************************")
+  print('---------------------teacher graph params:-----------------------')
+  for var in name_to_variable:
+    print(var)
+  print("----------------------------------------------------------------")
 
   assignment_map = collections.OrderedDict()
   for x in init_vars:
