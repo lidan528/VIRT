@@ -26,7 +26,6 @@ python sbert_distill.py \
   --num_train_epochs=0.02 \
   --do_save=false \
   --output_dir=$OUTPUT \
-  --pooling_strategy=mean \
   --use_kd_logit_kl=false \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0 \
