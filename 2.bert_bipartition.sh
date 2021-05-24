@@ -1,10 +1,10 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=5
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool/
 python run_classifier_bipartition.py \
   --task_name=mnli \
-  --do_train=true \
+  --do_train=false \
   --do_eval=true \
   --do_predict=false \
   --data_dir=$MY_DATASET \
