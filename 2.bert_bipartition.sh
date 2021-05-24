@@ -4,7 +4,7 @@ export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ 
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool/
 python run_classifier_bipartition.py \
   --task_name=mnli \
-  --do_train=false \
+  --do_train=true \
   --do_eval=true \
   --do_predict=false \
   --data_dir=$MY_DATASET \
@@ -14,6 +14,6 @@ python run_classifier_bipartition.py \
   --max_seq_length=259 \
   --train_batch_size=40 \
   --learning_rate=5e-5 \
-  --num_train_epochs=5.0 \
+  --num_train_epochs=6.0 \
   --output_dir=$OUTPUT \
   --pooling_strategy=mean
