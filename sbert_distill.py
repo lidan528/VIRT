@@ -101,6 +101,21 @@ flags.DEFINE_bool(
 )
 
 flags.DEFINE_bool(
+    "use_layer_distill",  False,
+    "whether to use distill for hidden layer."
+)
+
+flags.DEFINE_string(
+    "layer_distill_mode", None,
+    "direct_mean or map_mean."
+)
+
+flags.DEFINE_float(
+    "kd_weight_layer", 0,
+    "The weight of hidden layer distillation."
+)
+
+flags.DEFINE_bool(
     "use_kd_logit_kl", None,
     "Whether to use logit mse distillations"
 )
@@ -1008,8 +1023,20 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("att_loss", distill_loss_att)
             tf.summary.scalar("att_loss_scaled", scaled_att_loss)
 
-
-
+        ## hidden h distill
+        if FLAGS.use_layer_distill:
+            tf.logging.info('*****use hidden layer as distill object...')
+            distill_hidden_loss = get_pooled_loss(teacher_model=model_teacher,
+                                          student_model_query=model_stu_query,
+                                          student_model_doc=model_stu_doc,
+                                          input_mask_teacher=input_mask_bert_ab,
+                                          input_mask_query=input_mask_sbert_a,
+                                          input_mask_doc=input_ids_sbert_b,
+                                          mode=FLAGS.layer_distill_mode)
+            scaled_hidden_loss = distill_hidden_loss * FLAGS.kd_weight_layer
+            total_loss = total_loss + scaled_hidden_loss
+            tf.summary.scalar("hidden_loss", distill_hidden_loss)
+            tf.summary.scalar("hidden_loss_scaled", scaled_hidden_loss)
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
@@ -1254,10 +1281,83 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
     return loss
 
 
+def get_pooled_embeddings(encode_layer, input_mask):
+    """
+    获取mean pool向量，同时去除input中padding项(mask为0)的影响。
+    encoder_layer:  [bs, seq_len, emb_dim]
+    input_mask: [bs, seq_len]
+    """
+    mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+    masked_output_layer = mask * encode_layer  # [bs_size, max_len, emb_dim]
+    sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
+    actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+    actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
+    output_layer = sum_masked_output_layer / actual_token_nums
+    return output_layer     # [bs_size, emb_dim]
+
+
+def get_pooled_embeddings_for2(encoder_layer1, encoder_layer2, input_mask1, input_mask2):
+    """
+    获取两个layer整体的mean pool向量，同时去除input中padding项(mask为0)的影响。
+    encoder_layer:  [bs, seq_len, emb_dim]
+    input_mask: [bs, seq_len]
+    """
+    input_mask = tf.concat([input_mask1, input_mask2], axis=-1)     #[bs, seq_len1+seq_len2]
+    encoder_layer = tf.concat([encoder_layer1, encoder_layer2], axis=1)   #[bs, seq_len1+seq_len2, emb_dim]
+    output_layer = get_pooled_embeddings(encoder_layer, input_mask)
+    return output_layer
 
 
 
+def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
+                    input_mask_teacher, input_mask_query, input_mask_doc,
+                    mode):
+    """
+    计算pooled的representation之间的差异；其中：
+    teacher采用mean pooling
+    mode1: [direct_mean] student采用整体的mean pooling，此时和teacher的mean pooling为同一维度
+    mode2: [map_mean] student分别将query和doc进行mean pooling, 然后调用|v1-v2, v1+v2...|，然后映射到teacher 维度
+    """
+    all_teacher_layers, all_query_layers, all_doc_layers = \
+        teacher_model.all_encoder_layers, \
+        student_model_query.all_encoder_layers, \
+        student_model_doc.all_encoder_layers
+    if mode == "direct_mean":
+        tf.logging.info('*****use direct mean as hidden pooling...')
+        loss, cnt = 0, 0
+        for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
+            # each layer is [bs, seq_len, emb_dim]
+            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
+            pooled_student_layer = get_pooled_embeddings_for2(query_layer, doc_layer, input_mask_query, input_mask_doc)
+            loss += tf.reduce_sum(tf.square(pooled_teacher_layer-pooled_student_layer))     # squared error
+            cnt = 1
+        return loss / cnt
+    elif mode == "map_mean":
+        tf.logging.info('*****use map mean as hidden pooling...')
+        loss, cnt = 0, 0
+        for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
+            # each layer is [bs, seq_len, emb_dim]
+            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
+            pooled_query_layer = get_pooled_embeddings(query_layer, input_mask_query)       #[bs, emb_dim]
+            pooled_doc_layer = get_pooled_embeddings(doc_layer, input_mask_doc)             #[bs, emb_dim]
+            sub_embedding = tf.abs(pooled_query_layer - pooled_doc_layer)
+            max_embedding = tf.square(tf.reduce_max([pooled_query_layer, pooled_doc_layer], axis=0))
+            regular_embedding = tf.concat([pooled_query_layer, pooled_doc_layer, sub_embedding, max_embedding], -1)
 
+            map_weights = tf.get_variable(
+                "map_weights", [teacher_model.hidden_size*4, teacher_model.hidden_size],
+                initializer=tf.truncated_normal_initializer(stddev=0.02))
+            map_bias = tf.get_variable(
+                "map_bias", [teacher_model.hidden_size],
+                initializer=tf.zeros_initializer())
+            mapped_student_layer = tf.matmul(regular_embedding, map_weights, transpose_b=True)
+            mapped_student_layer = tf.nn.bias_add(mapped_student_layer, map_bias)
+
+            loss += tf.reduce_sum(tf.square(pooled_teacher_layer-mapped_student_layer))     # squared error
+            cnt = 1
+        return loss / cnt
+    else:
+        assert 1==2
 
 
 

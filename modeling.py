@@ -841,7 +841,7 @@ def attention_layer(from_tensor,
   # `context_layer` = [B, F, N, H]
   context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
 
-  if do_return_2d_tensor:
+  if do_return_2d_tensor:       # TRUE in BERT
     # `context_layer` = [B*F, N*H]
     context_layer = tf.reshape(
         context_layer,
@@ -938,6 +938,7 @@ def transformer_model(input_tensor,
       with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
+            # `attention_head` = [B*F, N*H]
           attention_head, attention_scores_before_mask, attention_probs_ori,\
               q_w_4d, k_w_4d= attention_layer(
               from_tensor=layer_input,
@@ -959,11 +960,11 @@ def transformer_model(input_tensor,
 
         attention_output = None
         if len(attention_heads) == 1:
-          attention_output = attention_heads[0]
+          attention_output = attention_heads[0]                 #attention_head实际一直是1, 实际就是一层trans的att输出
         else:
           # In the case where we have other sequences, we just concatenate
           # them to the self-attention head before the projection.
-          attention_output = tf.concat(attention_heads, axis=-1)
+          attention_output = tf.concat(attention_heads, axis=-1)    # attention_head实际一直是1
 
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
@@ -973,7 +974,7 @@ def transformer_model(input_tensor,
               hidden_size,
               kernel_initializer=create_initializer(initializer_range))
           attention_output = dropout(attention_output, hidden_dropout_prob)
-          attention_output = layer_norm(attention_output + layer_input)
+          attention_output = layer_norm(attention_output + layer_input)  #[bs * seq_len, num_heads * head_dim] (2d)
 
       # The activation is only applied to the "intermediate" hidden layer.
       with tf.variable_scope("intermediate"):
@@ -981,7 +982,7 @@ def transformer_model(input_tensor,
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
-            kernel_initializer=create_initializer(initializer_range))
+            kernel_initializer=create_initializer(initializer_range))   #[bs * seq_len, num_heads * head_dim] (2d)
 
       # Down-project back to `hidden_size` then add the residual.
       with tf.variable_scope("output"):
@@ -991,13 +992,13 @@ def transformer_model(input_tensor,
             kernel_initializer=create_initializer(initializer_range))
         layer_output = dropout(layer_output, hidden_dropout_prob)
         layer_output = layer_norm(layer_output + attention_output)
-        prev_output = layer_output
+        prev_output = layer_output                                  #[bs * seq_len, num_heads * head_dim] (2d)
         all_layer_outputs.append(layer_output)
 
-  if do_return_all_layers:
+  if do_return_all_layers:     # True at BERT
     final_outputs = []
     for layer_output in all_layer_outputs:
-      final_output = reshape_from_matrix(layer_output, input_shape)
+      final_output = reshape_from_matrix(layer_output, input_shape)     # transfer 2d to 3d:-->[bs, seq_len, emb_dim]
       final_outputs.append(final_output)
     return final_outputs, all_attention_scores_before_mask, all_attention_probs_ori, all_q_w_4d, all_k_w_4d
   else:
