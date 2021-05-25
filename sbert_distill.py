@@ -1335,6 +1335,12 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
     elif mode == "map_mean":
         tf.logging.info('*****use map mean as hidden pooling...')
         loss, cnt = 0, 0
+        map_weights = tf.get_variable(
+            "map_weights", [teacher_model.hidden_size * 4, teacher_model.hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+        map_bias = tf.get_variable(
+            "map_bias", [teacher_model.hidden_size],
+            initializer=tf.zeros_initializer())
         for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
             # each layer is [bs, seq_len, emb_dim]
             pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
@@ -1344,12 +1350,6 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             max_embedding = tf.square(tf.reduce_max([pooled_query_layer, pooled_doc_layer], axis=0))
             regular_embedding = tf.concat([pooled_query_layer, pooled_doc_layer, sub_embedding, max_embedding], -1)
 
-            map_weights = tf.get_variable(
-                "map_weights", [teacher_model.hidden_size*4, teacher_model.hidden_size],
-                initializer=tf.truncated_normal_initializer(stddev=0.02))
-            map_bias = tf.get_variable(
-                "map_bias", [teacher_model.hidden_size],
-                initializer=tf.zeros_initializer())
             mapped_student_layer = tf.matmul(regular_embedding, map_weights)
             mapped_student_layer = tf.nn.bias_add(mapped_student_layer, map_bias)
 
