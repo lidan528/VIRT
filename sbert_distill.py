@@ -1350,7 +1350,7 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             map_bias = tf.get_variable(
                 "map_bias", [teacher_model.hidden_size],
                 initializer=tf.zeros_initializer())
-            mapped_student_layer = tf.matmul(regular_embedding, map_weights, transpose_b=True)
+            mapped_student_layer = tf.matmul(regular_embedding, map_weights)
             mapped_student_layer = tf.nn.bias_add(mapped_student_layer, map_bias)
 
             loss += tf.reduce_sum(tf.square(pooled_teacher_layer-mapped_student_layer))     # squared error
