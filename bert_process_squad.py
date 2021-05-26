@@ -338,7 +338,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       if example.end_position < len(example.doc_tokens) - 1:                # 如果答案的最后一个词不是句子的最后一个词
         tok_end_position = orig_to_tok_index[example.end_position + 1] - 1  # 最后一个词idx+1：下一个词的idx；将下一个词的idx映射为token_idx, 然后减1即为最后一个
         # 即答案的第一个字符所在的词的词idx(example.start_position), 这个词token后，第一个token的token_idx为tok_start_position
-        # 答案的最后一个字符所在的词的下一个词idx(example.end_position+1), 这个词token后，第一个token的(token_idx-1)为tok_start_position
+        # 答案的最后一个字符所在的词的下一个词idx(example.end_position+1), 这个词token后，第一个token的(token_idx-1)为tok_end_position, 所以是左闭you闭
       else:     #此时没有下一个词了
         tok_end_position = len(all_doc_tokens) - 1                          # 最后一个token的idx
       (tok_start_position, tok_end_position) = _improve_answer_span(
@@ -359,10 +359,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       length = len(all_doc_tokens) - start_offset
       if length > max_tokens_for_doc:
         length = max_tokens_for_doc
-      doc_spans.append(_DocSpan(start=start_offset, length=length))
+      doc_spans.append(_DocSpan(start=start_offset, length=length))     # 每一段都存着从start_offset起，长为length的tokens段
       if start_offset + length == len(all_doc_tokens):
         break
-      start_offset += min(length, doc_stride)
+      start_offset += min(length, doc_stride)       # 最长不能跳过length (即不能有token没有覆盖到)
 
     for (doc_span_index, doc_span) in enumerate(doc_spans):
       tokens = []
@@ -378,12 +378,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       segment_ids.append(0)
 
       for i in range(doc_span.length):
-        split_token_index = doc_span.start + i
-        token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
-
+        split_token_index = doc_span.start + i      # 一段中要处理的token的idx为该段的start_offset + 该token在该段中的偏移
+        token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index] #token_to_orig_map{token在query+该段context中的idx : token对应的词在原doc句子中的idx}
+                                                                                # 也即  {该段doc中的token在这一次整体BERT输入中的idx: token对应的词在原doc句子中的idx}
         is_max_context = _check_is_max_context(doc_spans, doc_span_index,
                                                split_token_index)
-        token_is_max_context[len(tokens)] = is_max_context
+        token_is_max_context[len(tokens)] = is_max_context       #{该段doc中的token在这一次整体BERT输入中的idx: 该段span对于这个token来说是不是最居中的}
         tokens.append(all_doc_tokens[split_token_index])
         segment_ids.append(1)
       tokens.append("[SEP]")
@@ -411,17 +411,17 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         # For training, if our document chunk does not contain an annotation
         # we throw it out, since there is nothing to predict.
         doc_start = doc_span.start
-        doc_end = doc_span.start + doc_span.length - 1
+        doc_end = doc_span.start + doc_span.length - 1      # 左闭右闭
         out_of_span = False
         if not (tok_start_position >= doc_start and
-                tok_end_position <= doc_end):
+                tok_end_position <= doc_end):               # 如果训练时答案没有完全在这一段里面，就舍弃掉这个example
           out_of_span = True
         if out_of_span:
           start_position = 0
           end_position = 0
         else:
           doc_offset = len(query_tokens) + 2
-          start_position = tok_start_position - doc_start + doc_offset
+          start_position = tok_start_position - doc_start + doc_offset          # 在这一段BERT输入中的偏移
           end_position = tok_end_position - doc_start + doc_offset
 
       if is_training and example.is_impossible:
@@ -531,11 +531,14 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
   # Now the word 'bought' will have two scores from spans B and C. We only
   # want to consider the score with "maximum context", which we define as
   # the *minimum* of its left and right context (the *sum* of left and
-  # right context will always be the same, of course).
+  # right context will always be the same, of course).  也就是说，让它的位置尽可能居中
   #
   # In the example the maximum context for 'bought' would be span C since
   # it has 1 left context and 3 right context, while span B has 4 left context
   # and 0 right context.
+  # doc_spans: 元组列表，(该段span在整个句子中的offset，该段span的长度)
+  # cur_span_index: 这是第几段span
+  # position: 某个token在整个doc中的位置, 值得一提的是这个token必定在cur_span_index代表的span下，但并不一定只出现在这个span中
   best_score = None
   best_span_index = None
   for (span_index, doc_span) in enumerate(doc_spans):
