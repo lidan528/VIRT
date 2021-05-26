@@ -1308,6 +1308,23 @@ def get_pooled_embeddings_for2(encoder_layer1, encoder_layer2, input_mask1, inpu
     return output_layer
 
 
+def cosine_distance(X1, X2):
+    """
+    余弦相似度
+    X1 : [bs, emb_dim]
+    X2:  [bs, emb_dim]
+    """
+    X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=-1))    #[bs]
+    X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=-1))    #[bs]
+    X1_norm_X2_norm = X1_norm * X2_norm
+
+    X1_X2 = X1 * X2     #[bs * emb_dim]
+    X1_X2 = tf.reduce_sum(X1_X2, axis=-1)           #[bs]
+
+    cosine = X1_X2 / X1_norm_X2_norm        # 相似度，越大越好, [bs]
+    cosine = tf.reduce_mean(cosine, axis=-1)
+    return 1-cosine             #distance
+
 
 def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
                     input_mask_teacher, input_mask_query, input_mask_doc,
@@ -1329,7 +1346,8 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             # each layer is [bs, seq_len, emb_dim]
             pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
             pooled_student_layer = get_pooled_embeddings_for2(query_layer, doc_layer, input_mask_query, input_mask_doc)
-            loss += tf.reduce_sum(tf.square(pooled_teacher_layer-pooled_student_layer))     # squared error
+            # loss += tf.reduce_sum(tf.square(pooled_teacher_layer-pooled_student_layer))     # squared error
+            loss += cosine_distance(pooled_student_layer, pooled_teacher_layer)
             cnt = 1
         return loss / cnt
     elif mode == "map_mean":
@@ -1353,7 +1371,8 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             mapped_student_layer = tf.matmul(regular_embedding, map_weights)
             mapped_student_layer = tf.nn.bias_add(mapped_student_layer, map_bias)
 
-            loss += tf.reduce_sum(tf.square(pooled_teacher_layer-mapped_student_layer))     # squared error
+            # loss += tf.reduce_sum(tf.square(pooled_teacher_layer-mapped_student_layer))     # squared error
+            loss += cosine_distance(pooled_teacher_layer, mapped_student_layer)
             cnt = 1
         return loss / cnt
     else:
