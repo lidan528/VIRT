@@ -440,6 +440,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         token_is_max_context[len(tokens)] = is_max_context       #{该段doc中的token在这一次整体BERT输入中的idx: 该段span对于这个token来说是不是最居中的}
         tokens.append(all_doc_tokens[split_token_index])
         segment_ids.append(1)
+        input_ids += tokenizer.convert_tokens_to_ids([all_doc_tokens[split_token_index]])
         input_mask.append(1)
       #   [CLS], query_tokens, <PAD>,[SEP], doc
       while len(tokens) < max_seq_length - 1:
