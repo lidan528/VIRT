@@ -1418,21 +1418,19 @@ def main(_):
 
   if FLAGS.do_train:
     train_file_tfr = os.path.join(FLAGS.output_dir, "train.tf_record")
-    if tf.gfile.Exists(train_file_tfr):
-      print("train file exists")
-    else:
-      train_writer = FeatureWriter(
-        filename=train_file_tfr,
-        is_training=True)
-      convert_examples_to_features(
-        examples=train_examples,
-        tokenizer=tokenizer,
-        max_seq_length=FLAGS.max_seq_length,
-        doc_stride=FLAGS.doc_stride,
-        max_query_length=FLAGS.max_query_length,
-        is_training=True,
-        output_fn=train_writer.process_feature)
-      train_writer.close()
+
+    train_writer = FeatureWriter(
+      filename=train_file_tfr,
+      is_training=True)
+    convert_examples_to_features(
+      examples=train_examples,
+      tokenizer=tokenizer,
+      max_seq_length=FLAGS.max_seq_length,
+      doc_stride=FLAGS.doc_stride,
+      max_query_length=FLAGS.max_query_length,
+      is_training=True,
+      output_fn=train_writer.process_feature)
+    train_writer.close()
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Num orig examples = %d", len(train_examples))
