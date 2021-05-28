@@ -521,6 +521,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
           tf.logging.info(
               "answer: %s" % (tokenization.printable_text(answer_text)))
 
+      if unique_id % 1000 == 0:
+        tf.logging.info("Writing example %d " % (unique_id-1000000000))
+
       feature = InputFeatures(
           unique_id=unique_id,          # 在块中的unique id
           example_index=example_index,  # 一个answer-question-doc的 id，即来自于同一个doc的span共享example_index
