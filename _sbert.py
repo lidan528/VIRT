@@ -152,7 +152,7 @@ flags.DEFINE_integer(
     "this will be truncated to this length.")
 
 flags.DEFINE_integer(
-    "max_doc_length", 253,    # 384-64-3 in bert
+    "max_doc_length", 317,    # 384-64-3 in bert
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
 
