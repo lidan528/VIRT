@@ -293,11 +293,11 @@ def read_squad_examples(input_file, is_training):
             orig_answer_text = ""
 
         example = SquadExample(
-            qas_id=qas_id,
+            qas_id=qas_id,                  # id为原始id
             question_text=question_text,
             doc_tokens=doc_tokens,
-            orig_answer_text=orig_answer_text,
-            start_position=start_position,  # 第一个字符所在词在原句子中的idx
+            orig_answer_text=orig_answer_text,      # 通过这个来eval, eval的时候，直接把example当ground truth，id为原始id
+            start_position=start_position,  # 第一个字符所在词在原句子中的idx，如果是预测，则为None
             end_position=end_position,      # 最后一个字符所在词在原句子中的idx
             is_impossible=is_impossible)
         examples.append(example)
@@ -421,7 +421,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
           end_position = 0
         else:
           doc_offset = len(query_tokens) + 2
-          start_position = tok_start_position - doc_start + doc_offset          # 在这一段BERT输入中的偏移
+          start_position = tok_start_position - doc_start + doc_offset          # 在这一段BERT输入中的偏移，tok_start_position为该token在整个doc中的token_idx， doc_offset为在doc在BERT输入中的偏移
           end_position = tok_end_position - doc_start + doc_offset
 
       if is_training and example.is_impossible:
@@ -455,8 +455,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
               "answer: %s" % (tokenization.printable_text(answer_text)))
 
       feature = InputFeatures(
-          unique_id=unique_id,
-          example_index=example_index,
+          unique_id=unique_id,          # 在块中的unique id，已经用10000000初始化
+          example_index=example_index,  # 一个answer-question-doc的 id，即来自于同一个doc的span共享example_index
           doc_span_index=doc_span_index,
           tokens=tokens,
           token_to_orig_map=token_to_orig_map,
@@ -588,13 +588,13 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
   logits = tf.nn.bias_add(logits, output_bias)
 
   logits = tf.reshape(logits, [batch_size, seq_length, 2])
-  logits = tf.transpose(logits, [2, 0, 1])
+  logits = tf.transpose(logits, [2, 0, 1])      # [2, bs, seq_len]      # each position word_embedding mapped to a value
 
   unstacked_logits = tf.unstack(logits, axis=0)
 
   (start_logits, end_logits) = (unstacked_logits[0], unstacked_logits[1])
 
-  return (start_logits, end_logits)
+  return (start_logits, end_logits)         #[bs, seq_len]
 
 
 def model_fn_builder(bert_config, init_checkpoint, learning_rate,
@@ -757,11 +757,11 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
   example_index_to_features = collections.defaultdict(list)
   for feature in all_features:
-    example_index_to_features[feature.example_index].append(feature)
+    example_index_to_features[feature.example_index].append(feature)    # 来自于同一个doc的不同span共享一个example_index
 
   unique_id_to_result = {}
   for result in all_results:
-    unique_id_to_result[result.unique_id] = result
+    unique_id_to_result[result.unique_id] = result          # 将每一个span的独特id映射为对应的答案
 
   _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
       "PrelimPrediction",
@@ -772,7 +772,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
   scores_diff_json = collections.OrderedDict()
 
   for (example_index, example) in enumerate(all_examples):
-    features = example_index_to_features[example_index]
+    features = example_index_to_features[example_index]         # 这个doc下所有span的预测
 
     prelim_predictions = []
     # keep track of the minimum score of null start+end of position 0
@@ -780,9 +780,9 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     min_null_feature_index = 0  # the paragraph slice with min mull score
     null_start_logit = 0  # the start logit at the slice with min null score
     null_end_logit = 0  # the end logit at the slice with min null score
-    for (feature_index, feature) in enumerate(features):
-      result = unique_id_to_result[feature.unique_id]
-      start_indexes = _get_best_indexes(result.start_logits, n_best_size)
+    for (feature_index, feature) in enumerate(features):                        # 同一doc的所有span
+      result = unique_id_to_result[feature.unique_id]                           # 该span的预测结果
+      start_indexes = _get_best_indexes(result.start_logits, n_best_size)       # 该span对于start index的最高的n_best_size
       end_indexes = _get_best_indexes(result.end_logits, n_best_size)
       # if we could have irrelevant answers, get the min score of irrelevant
       if FLAGS.version_2_with_negative:
@@ -794,18 +794,18 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
           null_end_logit = result.end_logits[0]
       for start_index in start_indexes:
         for end_index in end_indexes:
-          # We could hypothetically create invalid predictions, e.g., predict
+          # We could hypothetically create invalid predictions, e.g., predict           # 同同一doc的所有span，每个span都进行n_best_size X n_best_size 组合，取出其中合法的
           # that the start of the span is in the question. We throw out all
           # invalid predictions.
           if start_index >= len(feature.tokens):
             continue
           if end_index >= len(feature.tokens):
             continue
-          if start_index not in feature.token_to_orig_map:
+          if start_index not in feature.token_to_orig_map:  #{该段doc中的token在这一次整体BERT输入中的idx: token对应的词在原doc句子中的idx}, 如果不在，说明start_index不在doc span中
             continue
           if end_index not in feature.token_to_orig_map:
             continue
-          if not feature.token_is_max_context.get(start_index, False):
+          if not feature.token_is_max_context.get(start_index, False):  # start不是在最居中的位置
             continue
           if end_index < start_index:
             continue
@@ -814,23 +814,23 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             continue
           prelim_predictions.append(
               _PrelimPrediction(
-                  feature_index=feature_index,
-                  start_index=start_index,
+                  feature_index=feature_index,              # 从0开始, 同一doc中的不同span的idx
+                  start_index=start_index,                  # 预测的得分在前n_best_size且合法的，start_token在BERT输入中的index
                   end_index=end_index,
-                  start_logit=result.start_logits[start_index],
+                  start_logit=result.start_logits[start_index],         # 得分值
                   end_logit=result.end_logits[end_index]))
-
+                                                        # 这样最多可以得到 n_best * n_best个区间的预测结果
     if FLAGS.version_2_with_negative:
       prelim_predictions.append(
           _PrelimPrediction(
-              feature_index=min_null_feature_index,
+              feature_index=min_null_feature_index,     # 在0，0这个位置最小的得分的span，在doc中的顺序
               start_index=0,
               end_index=0,
               start_logit=null_start_logit,
-              end_logit=null_end_logit))
+              end_logit=null_end_logit))        # 在该doc的span的预测集合中再加上一条非法的
     prelim_predictions = sorted(
         prelim_predictions,
-        key=lambda x: (x.start_logit + x.end_logit),
+        key=lambda x: (x.start_logit + x.end_logit),        # 一段doc中所有的合法span预测按照logit预测最大排序
         reverse=True)
 
     _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
@@ -839,14 +839,14 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     seen_predictions = {}
     nbest = []
     for pred in prelim_predictions:
-      if len(nbest) >= n_best_size:
+      if len(nbest) >= n_best_size:                         # 一个doc最多可以得到的n_span * n_best * n_best个区间的预测结果中，只保留n_best_size个span预测
         break
-      feature = features[pred.feature_index]
-      if pred.start_index > 0:  # this is a non-null prediction
-        tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
-        orig_doc_start = feature.token_to_orig_map[pred.start_index]
+      feature = features[pred.feature_index]                # 选中这一条feature
+      if pred.start_index > 0:                              # this is a non-null prediction
+        tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]      # 一直是左闭右臂区间, 在该段span中的范围
+        orig_doc_start = feature.token_to_orig_map[pred.start_index]            # 也即  {该段doc中的token在这一次整体BERT输入中的idx: token对应的词在原doc句子中的idx}
         orig_doc_end = feature.token_to_orig_map[pred.end_index]
-        orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
+        orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]     # 真正的词列表, 但是可能会包含冗余信息, 如: 词是 (1893--1902)
         tok_text = " ".join(tok_tokens)
 
         # De-tokenize WordPieces that have been split off.
@@ -856,7 +856,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         # Clean whitespace
         tok_text = tok_text.strip()
         tok_text = " ".join(tok_text.split())
-        orig_text = " ".join(orig_tokens)
+        orig_text = " ".join(orig_tokens)                   #答案的所有字符所在在原始句子中的词列表, 可能会包含冗余信息, 如: 词是 (1893--1902)
 
         final_text = get_final_text(tok_text, orig_text, do_lower_case)
         if final_text in seen_predictions:
@@ -869,7 +869,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
       nbest.append(
           _NbestPrediction(
-              text=final_text,
+              text=final_text,                              # 一个doc中最终比较好的span预测的答案文本,
               start_logit=pred.start_logit,
               end_logit=pred.end_logit))
 
@@ -888,7 +888,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
     assert len(nbest) >= 1
 
-    total_scores = []
+    total_scores = []       # 最终得到的所有span预测中的可能性打分
     best_non_null_entry = None
     for entry in nbest:
       total_scores.append(entry.start_logit + entry.end_logit)
@@ -896,7 +896,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         if entry.text:
           best_non_null_entry = entry
 
-    probs = _compute_softmax(total_scores)
+    probs = _compute_softmax(total_scores)          # 手动对最多 n_best个预测的可能性进行softmax
 
     nbest_json = []
     for (i, entry) in enumerate(nbest):
@@ -909,8 +909,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
     assert len(nbest_json) >= 1
 
-    if not FLAGS.version_2_with_negative:
-      all_predictions[example.qas_id] = nbest_json[0]["text"]
+    if not FLAGS.version_2_with_negative:       # 如果无null, 直接返回最大的可能性
+      all_predictions[example.qas_id] = nbest_json[0]["text"]       # 在这里记录了原始id
     else:
       # predict "" iff the null score - the score of best non-null > threshold
       score_diff = score_null - best_non_null_entry.start_logit - (
@@ -1284,7 +1284,9 @@ def main(_):
                       FLAGS.n_best_size, FLAGS.max_answer_length,
                       FLAGS.do_lower_case, output_prediction_file,
                       output_nbest_file, output_null_log_odds_file)
-
+    # eval_examples的id为原始文件中的id，会被一起写入预测文件中，便于评测与原始文件对应
+    # eval_features中的unique_id已经被1000000初始化,
+    # all_result
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("vocab_file")
