@@ -270,7 +270,7 @@ def read_squad_examples(input_file, is_training):
   with tf.gfile.Open(input_file, "r") as reader:
     for paragraph in reader:
       paragraph = json.loads(paragraph.strip())
-      print(paragraph,'**')
+      # print(paragraph,'**')
       paragraph_text = paragraph["seq2"]      # 这里一定不能加strip！！！！，如果开头是\n，那么答案的idx就会错位
       doc_tokens = []       # 元素为单词
       char_to_word_offset = []
@@ -300,7 +300,7 @@ def read_squad_examples(input_file, is_training):
       start_position = None
       end_position = None
       orig_answer_text = None
-      print(char_to_word_offset, '--')
+      # print(char_to_word_offset, '--')
       if is_training:
         if not is_impossible:
           answer = paragraph["label"]["ans"][0]
