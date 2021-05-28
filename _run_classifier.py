@@ -1404,12 +1404,12 @@ def main(_):
       predict_batch_size=FLAGS.predict_batch_size)
 
   if FLAGS.do_train:
-    train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
-    if tf.gfile.Exists(train_file):
+    train_file_tfr = os.path.join(FLAGS.output_dir, "train.tf_record")
+    if tf.gfile.Exists(train_file_tfr):
       print("train file exists")
     else:
       train_writer = FeatureWriter(
-        filename=train_file,
+        filename=train_file_tfr,
         is_training=True)
       convert_examples_to_features(
         examples=train_examples,

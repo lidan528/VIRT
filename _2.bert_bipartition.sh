@@ -1,9 +1,11 @@
 export CUDA_VISIBLE_DEVICES=0
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
-export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/squad/ #全局变量 数据集所在地址
+export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/squad #全局变量 数据集所在地址
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/bert_base_bipartition/
 python _run_classifier.py \
   --task_name=squad \
+  --train_file=$MY_DATASET/squad_v1.1-train.jsonl \
+  --dev_file=$MY_DATASET/squad_v1.1-dev.jsonl \
   --do_train=true \
   --do_eval=true \
   --do_predict=false \
