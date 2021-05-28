@@ -271,7 +271,7 @@ def read_squad_examples(input_file, is_training):
     for paragraph in reader:
       paragraph = json.loads(paragraph.strip())
       print(paragraph,'**')
-      paragraph_text = paragraph["seq2"].strip()
+      paragraph_text = paragraph["seq2"]      # 这里一定不能加strip！！！！，如果开头是\n，那么答案的idx就会错位
       doc_tokens = []       # 元素为单词
       char_to_word_offset = []
       prev_is_whitespace = True
@@ -284,7 +284,8 @@ def read_squad_examples(input_file, is_training):
           else:
             doc_tokens[-1] += c
           prev_is_whitespace = False
-        char_to_word_offset.append(len(doc_tokens) - 1)    # 这个字符(包括空格)所在词，在句子中的idx; char_to_(word_offset)
+        char_to_word_offset.append(len(doc_tokens) - 1)    # 这个字符(包括空格)所在词，在句子中的idx; char_to_(word_offset)，
+        ## 因为需要映射到答案idx上去, 所以空格也要保留
 
 
       is_impossible = False
@@ -303,7 +304,7 @@ def read_squad_examples(input_file, is_training):
       if is_training:
         if not is_impossible:
           answer = paragraph["label"]["ans"][0]
-          orig_answer_text = answer[1].strip()
+          orig_answer_text = answer[1]    # 这里也不加strip，因为answer的实际offset可能从空白字符开始, 会影响后面的end_position计算
           answer_offset = answer[0]
           answer_length = len(orig_answer_text)       # 原答案文本的字符数
           start_position = char_to_word_offset[answer_offset]     # 答案的首字符在第几个词
