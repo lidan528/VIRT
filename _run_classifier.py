@@ -174,6 +174,16 @@ flags.DEFINE_float(
     "null_score_diff_threshold", 0.0,
     "If null_score - best_non_null is greater than the threshold predict null.")
 
+flags.DEFINE_string(
+    "train_file", None,
+    "train_jsonl file"
+)
+
+flags.DEFINE_string(
+    "dev_file", None,
+    "dev_jsonl file"
+)
+
 
 
 class SquadExample(object):
