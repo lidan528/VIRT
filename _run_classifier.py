@@ -305,8 +305,7 @@ def read_squad_examples(input_file, is_training):
           answer_offset = answer[0]
           answer_length = len(orig_answer_text)       # 原答案文本的字符数
           start_position = char_to_word_offset[answer_offset]     # 答案的首字符在第几个词
-          end_position = char_to_word_offset[answer_offset + answer_length -    #答案的最后一个字符在第几个词
-                                             1]
+          end_position = char_to_word_offset[answer_offset + answer_length - 1]  #答案的最后一个字符在第几个词
           # Only add answers where the text can be exactly recovered from the
           # document. If this CAN'T happen it's likely due to weird Unicode
           # stuff so we will just skip the example.
