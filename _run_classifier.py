@@ -1504,6 +1504,7 @@ def main(_):
     print("output_eval_file:", output_eval_file)
     tf.logging.info("output_eval_file:" + output_eval_file)
 
+    best_f1, best_em, best_ckpt_f1, best_ckpt_em = 0, 0, 0
     with tf.gfile.GFile(output_eval_file, "w") as writer:
       for global_step, filename in sorted(steps_and_files, key=lambda x: x[0]):
         tf.logging.info("evaluating {}...".format(filename) )
@@ -1531,12 +1532,22 @@ def main(_):
                           output_nbest_file, output_null_log_odds_file)
 
         eval_result = get_eval(FLAGS.dev_file, output_prediction_file)
-
+        f1, em = float(eval_result['F1']), float(eval_result['EM'])
+        if f1 > best_f1:
+          best_f1 = f1
+          best_ckpt_f1 = filename
+        if em > best_em:
+          best_em = em
+          best_ckpt_em = filename
         tf.logging.info("***** Eval results %s *****" % (filename))
         writer.write("***** Eval results %s *****\n" % (filename))
         for key in sorted(eval_result.keys()):
           tf.logging.info("  %s = %s", key, str(eval_result[key]))
           writer.write("%s = %s\n" % (key, str(eval_result[key])))
+
+    tf.logging.info("  best f1: {} from {}".format(best_f1, best_ckpt_f1))
+    tf.logging.info("  best em: {} from {}".format(best_em, best_ckpt_em))
+
 
   if FLAGS.do_predict:
     eval_examples = read_squad_examples(
