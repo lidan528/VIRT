@@ -1625,7 +1625,7 @@ def main(_):
     print("output_eval_file:", output_eval_file)
     tf.logging.info("output_eval_file:" + output_eval_file)
 
-    best_f1, best_em, best_ckpt_f1, best_ckpt_em = 0, 0, 0
+    best_f1, best_em, best_ckpt_f1, best_ckpt_em = 0, 0, 0, 0
     with tf.gfile.GFile(output_eval_file, "w") as writer:
       for global_step, filename in sorted(steps_and_files, key=lambda x: x[0]):
         tf.logging.info("evaluating {}...".format(filename) )
