@@ -944,13 +944,15 @@ def get_logits(pooled_output_layer_query, output_layer_doc, output_shape_doc):
   output_layer_doc : [bs, seq_length_doc, emb_dim]
   positions: [bs]
   """
+  batch_size, seq_length_doc, hidden_size = output_shape_doc
+
   pooled_output_layer_query = tf.expand_dims(pooled_output_layer_query, axis=1)   #[bs, 1, emb_dim]
+  pooled_output_layer_query = tf.tile(pooled_output_layer_query, [1, seq_length_doc, 1])
   sub_embedding = tf.abs(pooled_output_layer_query - output_layer_doc)
   max_embedding = tf.square(tf.reduce_max([pooled_output_layer_query, output_layer_doc], axis=0))
   regular_embedding = tf.concat([pooled_output_layer_query, output_layer_doc, sub_embedding, max_embedding], -1)
   # #[bs, seq_length_doc, emb_dim]
 
-  batch_size, seq_length_doc, hidden_size = output_shape_doc
   output_weights = tf.get_variable(
       "output_weights", [2, hidden_size],
       initializer=tf.truncated_normal_initializer(stddev=0.02))
