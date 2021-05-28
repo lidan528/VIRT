@@ -292,6 +292,7 @@ def read_squad_examples(input_file, is_training):
       if FLAGS.version_2_with_negative:
         is_impossible = paragraph["label"]["cls"]
       if (len(paragraph["label"]["ans"]) != 1) and (not is_impossible):
+        print(paragraph)
         raise ValueError(
           "For training, each question should have exactly 1 answer.")
       # for ans in paragraph["label"]:
