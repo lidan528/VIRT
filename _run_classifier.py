@@ -485,7 +485,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
           end_position = 0
         else:
           # doc_offset = len(query_tokens) + 2
-          doc_offset = len(max_query_length) + 2          # fixed query length
+          doc_offset = max_query_length + 2          # fixed query length
           start_position = tok_start_position - doc_start + doc_offset
           # 在这一段BERT输入中的偏移，tok_start_position为该token在整个doc中的token_idx， doc_offset为在doc在BERT输入中的偏移
           # tok_start_position - doc_start 为token在该段span中的偏移, + offset即为在BERT的偏移
