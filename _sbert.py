@@ -704,14 +704,17 @@ class DataProcessor(object):
 
 
 
-def input_fn_builder(input_file, seq_length, is_training, drop_remainder):
+def input_fn_builder(input_file, seq_length_query, seq_length_doc, is_training, drop_remainder):
   """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
   name_to_features = {
       "unique_ids": tf.FixedLenFeature([], tf.int64),
-      "input_ids": tf.FixedLenFeature([seq_length], tf.int64),
-      "input_mask": tf.FixedLenFeature([seq_length], tf.int64),
-      "segment_ids": tf.FixedLenFeature([seq_length], tf.int64),
+      "input_ids_query": tf.FixedLenFeature([seq_length_query], tf.int64),
+      "input_ids_doc": tf.FixedLenFeature([seq_length_doc], tf.int64),
+      "input_mask_query": tf.FixedLenFeature([seq_length_query], tf.int64),
+      "input_mask_doc": tf.FixedLenFeature([seq_length_doc], tf.int64),
+      "segment_ids_query": tf.FixedLenFeature([seq_length_query], tf.int64),
+      "segment_ids_doc": tf.FixedLenFeature([seq_length_doc], tf.int64),
   }
 
   if is_training:
@@ -1563,7 +1566,8 @@ def main(_):
 
     train_input_fn = input_fn_builder(
         input_file=train_writer.filename,
-        seq_length=FLAGS.max_seq_length,
+        seq_length_query=FLAGS.max_query_length + 2,    #[CLS], query, <PAD>, [SEP]
+        seq_length_doc=FLAGS.max_doc_length + 2, #[CLS], doc, <PAD>, [SEP]
         is_training=True,
         drop_remainder=True)
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
@@ -1598,7 +1602,8 @@ def main(_):
 
     predict_input_fn = input_fn_builder(
       input_file=eval_writer.filename,
-      seq_length=FLAGS.max_seq_length,
+      seq_length_query=FLAGS.max_query_length + 2,  # [CLS], query, <PAD>, [SEP]
+      seq_length_doc=FLAGS.max_doc_length + 2,  # [CLS], doc, <PAD>, [SEP]
       is_training=False,
       drop_remainder=False)
 
@@ -1686,7 +1691,8 @@ def main(_):
 
     predict_input_fn = input_fn_builder(
       input_file=eval_writer.filename,
-      seq_length=FLAGS.max_seq_length,
+      seq_length_query=FLAGS.max_query_length + 2,  # [CLS], query, <PAD>, [SEP]
+      seq_length_doc=FLAGS.max_doc_length + 2,  # [CLS], doc, <PAD>, [SEP]
       is_training=False,
       drop_remainder=False)
 
