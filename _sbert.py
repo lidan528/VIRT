@@ -301,10 +301,10 @@ def read_squad_examples(input_file, is_training):
         ## 因为需要映射到答案idx上去, 所以空格也要保留
 
 
-      is_impossible = False
-      if FLAGS.version_2_with_negative:
-        is_impossible = paragraph["label"]["cls"]
-      if (len(paragraph["label"]["ans"]) != 1) and (not is_impossible):
+      is_impossible = paragraph["label"]["cls"]
+      # if FLAGS.version_2_with_negative:
+      #   is_impossible = paragraph["label"]["cls"]
+      if (len(paragraph["label"]["ans"]) == 0):
         raise ValueError(
           "For training, each question should have exactly 1 answer.")
       # for ans in paragraph["label"]:
@@ -314,14 +314,14 @@ def read_squad_examples(input_file, is_training):
       end_position = None
       orig_answer_text = None
       # print(char_to_word_offset, '--')
-      if is_training:
-        if not is_impossible:
-          answer = paragraph["label"]["ans"][0]
-          orig_answer_text = answer[1]    # 这里也不加strip，因为answer的实际offset可能从空白字符开始, 会影响后面的end_position计算
+      answers_all = paragraph["label"]["ans"]
+      for answer in answers_all:
+        if is_training:
+          orig_answer_text = answer[1]  # 这里也不加strip，因为answer的实际offset可能从空白字符开始, 会影响后面的end_position计算
           answer_offset = answer[0]
-          answer_length = len(orig_answer_text)       # 原答案文本的字符数
-          start_position = char_to_word_offset[answer_offset]     # 答案的首字符在第几个词
-          end_position = char_to_word_offset[answer_offset + answer_length - 1]  #答案的最后一个字符在第几个词
+          answer_length = len(orig_answer_text)  # 原答案文本的字符数
+          start_position = char_to_word_offset[answer_offset]  # 答案的首字符在第几个词
+          end_position = char_to_word_offset[answer_offset + answer_length - 1]  # 答案的最后一个字符在第几个词
           # Only add answers where the text can be exactly recovered from the
           # document. If this CAN'T happen it's likely due to weird Unicode
           # stuff so we will just skip the example.
@@ -329,9 +329,9 @@ def read_squad_examples(input_file, is_training):
           # Note that this means for training mode, every example is NOT
           # guaranteed to be preserved.
           actual_text = " ".join(
-              doc_tokens[start_position:(end_position + 1)])          #答案文本中的词列表？（为什么要这样不清楚）
+              doc_tokens[start_position:(end_position + 1)])  # 答案文本中的词列表？（为什么要这样不清楚）
           cleaned_answer_text = " ".join(
-              tokenization.whitespace_tokenize(orig_answer_text))     #以空格为分割的答案文本的词列表
+            tokenization.whitespace_tokenize(orig_answer_text))  # 以空格为分割的答案文本的词列表
           if actual_text.find(cleaned_answer_text) == -1:
             tf.logging.warning("Could not find answer: '%s' vs. '%s'",
                                actual_text, cleaned_answer_text)
@@ -341,15 +341,15 @@ def read_squad_examples(input_file, is_training):
           end_position = -1
           orig_answer_text = ""
 
-      example = SquadExample(
+        example = SquadExample(
           qas_id=qas_id,
           question_text=question_text,
           doc_tokens=doc_tokens,
           orig_answer_text=orig_answer_text,
           start_position=start_position,  # 第一个字符所在词在原句子中的idx
-          end_position=end_position,      # 最后一个字符所在词在原句子中的idx
+          end_position=end_position,  # 最后一个字符所在词在原句子中的idx
           is_impossible=is_impossible)
-      examples.append(example)
+        examples.append(example)
 
   return examples
 
