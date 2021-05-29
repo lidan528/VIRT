@@ -954,14 +954,14 @@ def get_logits(pooled_output_layer_query, output_layer_doc, output_shape_doc):
   # #[bs, seq_length_doc, emb_dim]
 
   output_weights = tf.get_variable(
-      "output_weights", [2, hidden_size],
+      "output_weights", [2, hidden_size*4],
       initializer=tf.truncated_normal_initializer(stddev=0.02))
 
   output_bias = tf.get_variable(
       "output_bias", [2], initializer=tf.zeros_initializer())
 
   final_hidden_matrix = tf.reshape(regular_embedding,
-                                   [batch_size * seq_length_doc, hidden_size])
+                                   [batch_size * seq_length_doc, hidden_size*4])    #regular_embedding为四个向量拼接
   logits = tf.matmul(final_hidden_matrix, output_weights, transpose_b=True)
   logits = tf.nn.bias_add(logits, output_bias)
 
