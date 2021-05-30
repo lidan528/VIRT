@@ -1172,7 +1172,7 @@ def get_distill_logit_loss(start_logit_teacher, end_logit_teacher, start_logit_s
   logit_teacher: [bs, seq_len_bert], seq_len_bert = 1 + query_len + 1 + doc_len + 1
   logit_student: [bs, seq_len_sbert], seq_len_sbert = 1 + doc_len + 1
   """
-  s_logit_doc_teacher = start_logit_student[:, (1+FLAGS.max_query_length):-1]
+  s_logit_doc_teacher = start_logit_teacher[:, (1+FLAGS.max_query_length):-1]
   e_logit_doc_teacher = end_logit_teacher[:, (1+FLAGS.max_query_length):-1]
   s_probs_doc_teacher = tf.nn.softmax(s_logit_doc_teacher, axis=-1)
   e_probs_doc_teacher = tf.nn.softmax(e_logit_doc_teacher, axis=-1)
