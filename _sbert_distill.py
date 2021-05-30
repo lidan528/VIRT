@@ -888,7 +888,7 @@ def create_model_teacher(bert_config, is_training, input_ids, input_mask, segmen
 
   (start_logits, end_logits) = (unstacked_logits[0], unstacked_logits[1])
 
-  return (start_logits, end_logits)         # [bs, seq_len_teacher]
+  return (start_logits, end_logits, model)         # [bs, seq_len_teacher]
 
 
 def create_model_student(bert_config, is_training, input_ids, input_mask, segment_ids,
@@ -1009,7 +1009,7 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
     ## shape:  [batch_size, seq_len_doc]
     vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
-    start_logits_teacher, end_logits_teacher = create_model_teacher(
+    start_logits_teacher, end_logits_teacher, model_teacher = create_model_teacher(
       bert_config=bert_config,
       is_training=is_training,
       input_ids=input_ids_teacher,
@@ -1043,6 +1043,19 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       total_loss = regular_loss + scaled_logit_loss
       tf.summary.scalar("logit_loss_kl", kd_logit_loss)
       tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
+
+      ## attention loss
+    if FLAGS.use_kd_att:
+      tf.logging.info('use att as distill object...')
+      distill_loss_att = get_attention_loss(model_student_query=model_query,
+                                            model_student_doc=model_doc,
+                                            model_teacher=model_teacher,
+                                            input_mask_sbert_query=input_mask_query,
+                                            input_mask_sbert_doc=input_mask_doc)
+      scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
+      total_loss = total_loss + scaled_att_loss
+      tf.summary.scalar("att_loss", distill_loss_att)
+      tf.summary.scalar("att_loss_scaled", scaled_att_loss)
 
     assignment_map_teacher, initialized_variable_names_teacher = \
       modeling.get_assignment_map_from_checkpoint_teacher(
@@ -1195,6 +1208,100 @@ def get_distill_logit_loss(start_logit_teacher, end_logit_teacher, start_logit_s
 
   distill_logit_loss = (distill_loss_logit_kl_s + distill_loss_logit_kl_e) / 2
   return distill_logit_loss
+
+
+def create_att_mask(input_mask, seq_length_another):
+  """
+  相当于将input_mask列表复制seq_len次
+  得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
+  从而防止input_mask为0的元素被att，但它可以att to别的元素
+  如果输入的是mask_doc，那么就要复制query_length次，形成[query_length , mask_doc]的mask
+  """
+  to_shape = modeling.get_shape_list(input_mask, expected_rank=2)  # [batch-size, seq_len]
+  batch_size = to_shape[0]
+  seq_length_self = to_shape[1]
+  mask = tf.cast(
+    tf.reshape(input_mask, [batch_size, 1, seq_length_self]), tf.float32)
+  broadcast_ones = tf.ones(
+    shape=[batch_size, seq_length_another, 1], dtype=tf.float32)
+
+  mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
+  return mask
+
+
+def get_attention_loss(model_student_query, model_student_doc, model_teacher,
+                       input_mask_sbert_query, input_mask_sbert_doc):
+  """
+  获取交互的attention loss
+  """
+  tea_all_att_scores_before_mask, tea_all_att_probs_ori, \
+  tea_all_q_w_4d, tea_all_k_w_4d = model_teacher.all_attention_scores_before_mask, model_teacher.all_attention_probs_ori, \
+                                   model_teacher.all_q_w_4d, model_teacher.all_k_w_4d
+
+  stu_qu_all_att_scores_before_mask, stu_qu_all_att_probs_ori, \
+  stu_qu_all_q_w_4d, stu_qu_all_k_w_4d = model_student_query.all_attention_scores_before_mask, model_student_query.all_attention_probs_ori, \
+                                         model_student_query.all_q_w_4d, model_student_query.all_k_w_4d
+
+  stu_do_all_att_scores_before_mask, stu_do_all_att_probs_ori, \
+  stu_do_all_q_w_4d, stu_do_all_k_w_4d = model_student_doc.all_attention_scores_before_mask, model_student_doc.all_attention_probs_ori, \
+                                         model_student_doc.all_q_w_4d, model_student_doc.all_k_w_4d
+
+  size_per_head = int(model_teacher.hidden_size / model_teacher.num_attention_heads)
+  tf.logging.info("size_per_head: {}, expected 64 for base".format(size_per_head))
+
+  loss, num = 0, 0
+
+  for sbert_query_qw, sbert_doc_kw, \
+      sbert_query_kw, sbert_doc_qw, \
+      bert_att_score \
+          in zip(stu_qu_all_q_w_4d, stu_do_all_k_w_4d,
+                 stu_qu_all_k_w_4d, stu_do_all_q_w_4d,
+                 tea_all_att_scores_before_mask):
+    # sbert_query_qw: [bs, num_heads, seq_len=1+64+1, head_dim]
+    # sbert_doc_kw: [bs, num_heads, seq_len=1+317+1, head_dim]
+    # bert_att_score: [bs, num_heads, 1+64+1+317+1, 1+64+1+317+1]
+    query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :],
+                             transpose_b=True)  # [bs, num_heads, 64, 317]
+    query_doc_qk = tf.multiply(query_doc_qk,
+                               1.0 / math.sqrt(float(size_per_head)))
+    query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc, FLAGS.max_query_length)  # doc中的padding元素不应该被attend, [bs, 64, 1+317+1]
+    query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, :, 1:-1],
+                                               axis=[1])  # to [bs, 1, seq_len=64, seq_len=317]
+    query_doc_att_matrix_mask_adder = (1.0 - tf.cast(query_doc_att_matrix_mask, tf.float32)) * -10000.0
+    query_doc_att_scores = query_doc_qk + query_doc_att_matrix_mask_adder
+    query_doc_att_probs = tf.nn.softmax(query_doc_att_scores, axis=-1)      # [bs, num_heads, 64, 317]
+
+    # sbert_att_shape = modeling.get_shape_list(sbert_query_qw, expected_rank=4)  # [bs, num_heads, seq_len, head_dim]
+    # seq_len_sbert = sbert_att_shape[2]
+
+    # bert_att_score : [bs, num_heads, 1+query_length+1+doc_length+1, 1+query_length+1+doc_length+1]
+    bert_att_score_query_doc = bert_att_score[:, :, 1:(1+FLAGS.max_query_length), (1+FLAGS.max_query_length+1):-1]# [bs,num_heads,seq_len=64,seq_len=317]
+    bert_att_score_query_doc = bert_att_score_query_doc + query_doc_att_matrix_mask_adder
+    bert_att_probs_query_doc = tf.nn.softmax(bert_att_score_query_doc, axis=-1)
+    loss = loss + tf.losses.mean_squared_error(query_doc_att_probs, bert_att_probs_query_doc)
+    # -------------------------------------------------------------------
+
+    doc_query_qk = tf.matmul(sbert_doc_qw[:, :, 1:-1, :], sbert_query_kw[:, :, 1:-1, :],
+                             transpose_b=True)  # [bs, num_heads, 317, 64]
+    doc_query_qk = tf.multiply(doc_query_qk,
+                               1.0 / math.sqrt(float(size_per_head)))
+    doc_query_att_matrix_mask = create_att_mask(input_mask_sbert_query, FLAGS.max_doc_length) # query中的padding元素不应该被attend, [bs, 317, 1+64+1]
+    doc_query_att_matrix_mask = tf.expand_dims(doc_query_att_matrix_mask[:, :, 1:-1],
+                                               axis=[1])  # to [bs, 1, seq_len=317, seq_len=64]
+    doc_query_att_matrix_mask_adder = (1.0 - tf.cast(doc_query_att_matrix_mask, tf.float32)) * -10000.0
+    doc_query_att_scores = doc_query_qk + doc_query_att_matrix_mask_adder
+    doc_query_att_probs = tf.nn.softmax(doc_query_att_scores, axis=-1)
+    # bert_att_score : [bs, num_heads, 1+query_length+1+doc_length+1, 1+query_length+1+doc_length+1]
+    bert_att_score_doc_query = bert_att_score[:, :, (1+FLAGS.max_query_length+1):-1, 1:(1+FLAGS.max_query_length)]
+    bert_att_score_doc_query = bert_att_score_doc_query + doc_query_att_matrix_mask_adder
+    bert_att_probs_doc_query = tf.nn.softmax(bert_att_score_doc_query, axis=-1)
+    loss = loss + tf.losses.mean_squared_error(doc_query_att_probs, bert_att_probs_doc_query)
+
+    num += 1
+
+  loss = loss / num
+
+  return loss
 
 
 
