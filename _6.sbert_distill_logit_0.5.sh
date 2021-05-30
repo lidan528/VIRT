@@ -17,6 +17,7 @@ python _sbert_distill.py \
   --init_checkpoint_teacher=$TEACHERT_BASE_DIR/model.ckpt-13000 \
   --train_batch_size=32 \
   --learning_rate=5e-5 \
+  --pooling_strategy=mean \
   --num_train_epochs=6.0 \
   --output_dir=$OUTPUT \
   --use_kd_logit=true \
