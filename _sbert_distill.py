@@ -266,6 +266,7 @@ class InputFeatures(object):
                  tokens_doc,
                  token_teacher_to_orig_map,
                  token_to_orig_map,
+                 token_is_max_context_teacher,
                  token_is_max_context,
                  input_ids_teacher,
                  input_ids_query,
@@ -287,6 +288,7 @@ class InputFeatures(object):
         self.tokens_doc = tokens_doc
         self.token_teacher_to_orig_map = token_teacher_to_orig_map
         self.token_to_orig_map = token_to_orig_map
+        self.token_is_max_context_teacher = token_is_max_context_teacher,
         self.token_is_max_context = token_is_max_context
         self.input_ids_teacher = input_ids_teacher
         self.input_ids_query = input_ids_query
@@ -462,6 +464,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       tokens_query = []
       token_teacher_to_orig_map = {}
       token_to_orig_map = {}
+      token_is_max_context_teacher = {}
       token_is_max_context = {}
       segment_ids_query = []
       input_mask_query = []
@@ -515,6 +518,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         is_max_context = _check_is_max_context(doc_spans, doc_span_index,
                                                split_token_index)
         token_is_max_context[len(tokens_doc)] = is_max_context       #{该段doc中的token在这一次整体BERT输入中的idx: 该段span对于这个token来说是不是最居中的}
+        token_is_max_context_teacher[len(tokens_teacher)] = is_max_context
         tokens_doc.append(all_doc_tokens[split_token_index])
         tokens_teacher.append(all_doc_tokens[split_token_index])      #------teacher
         segment_ids_doc.append(1)
@@ -644,6 +648,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
           tokens_doc=tokens_doc,
           token_teacher_to_orig_map=token_teacher_to_orig_map,
           token_to_orig_map=token_to_orig_map,
+          token_is_max_context_teacher=token_is_max_context_teacher,
           token_is_max_context=token_is_max_context,
           input_ids_teacher=input_ids_teacher,
           input_ids_query=input_ids_query,
@@ -1030,7 +1035,7 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       tf.logging.info('use KL- of logits as distill object...')
       kd_logit_loss = get_distill_logit_loss(
                         start_logit_teacher=start_logits_teacher,
-                        end_logits_teacher=end_logits_teacher,
+                        end_logit_teacher=end_logits_teacher,
                         start_logit_student=start_logits_student,
                         end_logit_student=end_logits_student
       )
@@ -1083,8 +1088,10 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       #
       # total_loss = (start_loss + end_loss) / 2.0
 
+      # train_op = optimization.create_optimizer(
+      #     total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
       train_op = optimization.create_optimizer(
-          total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+        total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
 
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
@@ -1196,7 +1203,7 @@ RawResult = collections.namedtuple("RawResult",
 
 
 def write_predictions(all_examples, all_features, all_results, n_best_size,
-                      max_answer_length, do_lower_case, output_prediction_file,
+                      max_answer_length, do_lower_case, output_prediction_file, output_prediction_file_teacher,
                       output_nbest_file, output_null_log_odds_file):
   """Write final predictions to the json file and log-odds of null if needed."""
   tf.logging.info("Writing predictions to: %s" % (output_prediction_file))
@@ -1215,13 +1222,17 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
       ["feature_index", "start_index", "end_index", "start_logit", "end_logit"])
 
   all_predictions = collections.OrderedDict()
+  all_predictions_teacher = collections.OrderedDict()
   all_nbest_json = collections.OrderedDict()
+  all_nbest_json_teacher = collections.OrderedDict()
   scores_diff_json = collections.OrderedDict()
+  scores_diff_json_teacher = collections.OrderedDict()
 
   for (example_index, example) in enumerate(all_examples):
     features = example_index_to_features[example_index]         # 这个doc下所有span的预测
 
     prelim_predictions = []
+    prelim_predictions_teacher = []
     # keep track of the minimum score of null start+end of position 0
     score_null = 1000000  # large and positive
     min_null_feature_index = 0  # the paragraph slice with min mull score
@@ -1229,10 +1240,13 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     null_end_logit = 0  # the end logit at the slice with min null score
     for (feature_index, feature) in enumerate(features):                        # 同一doc的所有span
       result = unique_id_to_result[feature.unique_id]                           # 该span的预测结果
-      start_indexes = _get_best_indexes(result.start_logits, n_best_size)       # 该span对于start index的最高的n_best_size
-      end_indexes = _get_best_indexes(result.end_logits, n_best_size)
+      start_indexes = _get_best_indexes(result.start_logits_student, n_best_size)       # 该span对于start index的最高的n_best_size
+      start_indexes_teacher = _get_best_indexes(result.start_logits_teacher, n_best_size)
+      end_indexes = _get_best_indexes(result.end_logits_student, n_best_size)
+      end_indexes_teacher = _get_best_indexes(result.end_logits_teacher, n_best_size)
       # if we could have irrelevant answers, get the min score of irrelevant
       if FLAGS.version_2_with_negative:
+        tf.logging.info("**********No!!!!!!! FLAGS.version_2_with_negative**********")
         feature_null_score = result.start_logits[0] + result.end_logits[0]
         if feature_null_score < score_null:
           score_null = feature_null_score
@@ -1269,7 +1283,39 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                   start_logit=result.start_logits[start_index],         # 得分值
                   end_logit=result.end_logits[end_index]))
                                                         # 这样最多可以得到 n_best * n_best个区间的预测结果
+      for start_index_teacher in start_indexes_teacher:
+        for end_index_teacher in end_indexes_teacher:
+          # We could hypothetically create invalid predictions, e.g., predict # 同同一doc的所有span，每个span都进行n_best_size X n_best_size 组合，取出其中合法的
+          # that the start of the span is in the question. We throw out all
+          # invalid predictions.
+          if start_index_teacher >= len(feature.tokens_teacher):
+            continue
+          if end_index_teacher >= len(feature.tokens_teacher):
+            continue
+          if start_index_teacher not in feature.token_teacher_to_orig_map:
+            #{该段doc中的token在这一次整体BERT输入中的idx: token对应的词在原doc句子中的idx}, 如果不在，说明start_index不在doc span中
+            #token_to_orig_map 中的key都是真实存在的token，这样过滤掉了padding
+            continue
+          if end_index_teacher not in feature.token_teacher_to_orig_map:
+            continue
+          if not feature.token_is_max_context_teacher.get(start_index_teacher, False):  # start不是在最居中的位置
+            continue
+          if end_index_teacher < start_index_teacher:
+            continue
+          length = end_index_teacher - start_index_teacher + 1
+          if length > max_answer_length:
+            continue
+          prelim_predictions_teacher.append(
+              _PrelimPrediction(
+                  feature_index=feature_index,              # 从0开始, 同一doc中的不同span的idx
+                  start_index=start_index_teacher,                  # 预测的得分在前n_best_size且合法的，start_token在BERT输入中的index
+                  end_index=end_index_teacher,
+                  start_logit=result.start_logits_teacher[start_index_teacher],         # 得分值
+                  end_logit=result.end_logits_teacher[end_index_teacher]))
+                                                        # 这样最多可以得到 n_best * n_best个区间的预测结果
+
     if FLAGS.version_2_with_negative:
+      tf.logging.info("**********No!!!!!!! FLAGS.version_2_with_negative**********")
       prelim_predictions.append(
           _PrelimPrediction(
               feature_index=min_null_feature_index,     # 在0，0这个位置最小的得分的span，在doc中的顺序
@@ -1281,12 +1327,18 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         prelim_predictions,
         key=lambda x: (x.start_logit + x.end_logit),        # 一段doc中所有的合法span预测按照logit预测最大排序
         reverse=True)
+    prelim_predictions_teacher = sorted(
+      prelim_predictions_teacher,
+      key=lambda x: (x.start_logit + x.end_logit),  # 一段doc中所有的合法span预测按照logit预测最大排序
+      reverse=True)
 
     _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
         "NbestPrediction", ["text", "start_logit", "end_logit"])
 
     seen_predictions = {}
+    seen_predictions_teacher = {}
     nbest = []
+    nbest_teacher = []
     for pred in prelim_predictions:
       if len(nbest) >= n_best_size:                         # 一个doc最多可以得到的n_span * n_best * n_best个区间的预测结果中，只保留n_best_size个span预测
         break
@@ -1322,6 +1374,43 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
               start_logit=pred.start_logit,
               end_logit=pred.end_logit))
 
+    #---------------------------------for teacher--------------------------------------------------
+    for pred in prelim_predictions_teacher:
+      if len(nbest_teacher) >= n_best_size:                         # 一个doc最多可以得到的n_span * n_best * n_best个区间的预测结果中，只保留n_best_size个span预测
+        break
+      feature = features[pred.feature_index]                # 选中这一条feature
+      if pred.start_index > 0:                              # this is a non-null prediction
+        tok_tokens = feature.tokens_teacher[pred.start_index:(pred.end_index + 1)]      # 一直是左闭右臂区间, 在该段span中的范围
+        orig_doc_start = feature.token_teacher_to_orig_map[pred.start_index]            # 也即  {该段doc中的token在这一次整体BERT输入中的idx: token对应的词在原doc句子中的idx}
+        orig_doc_end = feature.token_teacher_to_orig_map[pred.end_index]
+        orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]     # 真正的词列表, 但是可能会包含冗余信息, 如: 词是 (1893--1902)
+        tok_text = " ".join(tok_tokens)
+
+        # De-tokenize WordPieces that have been split off.
+        tok_text = tok_text.replace(" ##", "")
+        tok_text = tok_text.replace("##", "")
+
+        # Clean whitespace
+        tok_text = tok_text.strip()
+        tok_text = " ".join(tok_text.split())
+        orig_text = " ".join(orig_tokens)                   #答案的所有字符所在在原始句子中的词列表, 可能会包含冗余信息, 如: 词是 (1893--1902)
+
+        final_text = get_final_text(tok_text, orig_text, do_lower_case)
+        if final_text in seen_predictions_teacher:
+          continue
+
+        seen_predictions_teacher[final_text] = True
+      else:
+        final_text = ""
+        seen_predictions_teacher[final_text] = True
+
+      nbest_teacher.append(
+          _NbestPrediction(
+              text=final_text,                              # 一个doc中最终比较好的span预测的答案文本,
+              start_logit=pred.start_logit,
+              end_logit=pred.end_logit))
+
+
     # if we didn't inlude the empty option in the n-best, inlcude it
     if FLAGS.version_2_with_negative:
       if "" not in seen_predictions:
@@ -1334,8 +1423,12 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     if not nbest:
       nbest.append(
           _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
-
     assert len(nbest) >= 1
+
+    if not nbest_teacher:
+      nbest_teacher.append(
+          _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
+    assert len(nbest_teacher) >= 1
 
     total_scores = []       # 最终得到的所有span预测中的可能性打分
     best_non_null_entry = None
@@ -1344,8 +1437,16 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
       if not best_non_null_entry:
         if entry.text:
           best_non_null_entry = entry
-
     probs = _compute_softmax(total_scores)          # 手动对最多 n_best个预测的可能性进行softmax
+
+    total_scores_teacher = []  # 最终得到的所有span预测中的可能性打分
+    best_non_null_entry_teacher = None
+    for entry in nbest_teacher:
+      total_scores_teacher.append(entry.start_logit + entry.end_logit)
+      if not best_non_null_entry_teacher:
+        if entry.text:
+          best_non_null_entry_teacher = entry
+    probs_teacher = _compute_softmax(total_scores_teacher)  # 手动对最多 n_best个预测的可能性进行softmax
 
     nbest_json = []
     for (i, entry) in enumerate(nbest):
@@ -1355,11 +1456,21 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
       output["start_logit"] = entry.start_logit
       output["end_logit"] = entry.end_logit
       nbest_json.append(output)
-
     assert len(nbest_json) >= 1
+
+    nbest_json_teacher = []
+    for (i, entry) in enumerate(nbest_teacher):
+      output = collections.OrderedDict()
+      output["text"] = entry.text
+      output["probability"] = probs[i]
+      output["start_logit"] = entry.start_logit
+      output["end_logit"] = entry.end_logit
+      nbest_json_teacher.append(output)
+    assert len(nbest_json_teacher) >= 1
 
     if not FLAGS.version_2_with_negative:       # 如果无null, 直接返回最大的可能性
       all_predictions[example.qas_id] = nbest_json[0]["text"]       # 在这里记录了原始id
+      all_predictions_teacher[example.qas_id] = nbest_json_teacher[0]["text"]
     else:
       # predict "" iff the null score - the score of best non-null > threshold
       score_diff = score_null - best_non_null_entry.start_logit - (
@@ -1371,9 +1482,13 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         all_predictions[example.qas_id] = best_non_null_entry.text
 
     all_nbest_json[example.qas_id] = nbest_json
+    all_nbest_json_teacher[example.qas_id] = nbest_json_teacher
 
   with tf.gfile.GFile(output_prediction_file, "w") as writer:
     writer.write(json.dumps(all_predictions, indent=4) + "\n")
+
+  with tf.gfile.GFile(output_prediction_file_teacher, "w") as writer:
+    writer.write(json.dumps(all_predictions_teacher, indent=4) + "\n")
 
   with tf.gfile.GFile(output_nbest_file, "w") as writer:
     writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
@@ -1534,10 +1649,13 @@ class FeatureWriter(object):
 
     features = collections.OrderedDict()
     features["unique_ids"] = create_int_feature([feature.unique_id])
+    features["input_ids_teacher"] = create_int_feature(feature.input_ids_teacher)
     features["input_ids_query"] = create_int_feature(feature.input_ids_query)
     features["input_ids_doc"] = create_int_feature(feature.input_ids_doc)
+    features["input_mask_teacher"] = create_int_feature(feature.input_mask_teacher)
     features["input_mask_query"] = create_int_feature(feature.input_mask_query)
     features["input_mask_doc"] = create_int_feature(feature.input_mask_doc)
+    features["segment_ids_teacher"] = create_int_feature(feature.segment_ids_teacher)
     features["segment_ids_query"] = create_int_feature(feature.segment_ids_query)
     features["segment_ids_doc"] = create_int_feature(feature.segment_ids_doc)
 
@@ -1869,15 +1987,17 @@ def main(_):
             ))
 
         output_prediction_file = os.path.join(FLAGS.output_dir, "dev_predictions.json")
+        output_prediction_file_teacher = os.path.join(FLAGS.output_dir, "dev_predictions_teacher.json")
         output_nbest_file = os.path.join(FLAGS.output_dir, "dev_nbest_predictions.json")
         output_null_log_odds_file = os.path.join(FLAGS.output_dir, "dev_null_odds.json")
 
         write_predictions(eval_examples, eval_features, all_results,
                           FLAGS.n_best_size, FLAGS.max_answer_length,
-                          FLAGS.do_lower_case, output_prediction_file,
+                          FLAGS.do_lower_case, output_prediction_file, output_prediction_file_teacher,
                           output_nbest_file, output_null_log_odds_file)
 
         eval_result = get_eval(FLAGS.dev_file, output_prediction_file)
+        eval_result_teacher = get_eval(FLAGS.dev_file, output_prediction_file_teacher)
         f1, em = float(eval_result['F1']), float(eval_result['EM'])
         if f1 > best_f1:
           best_f1 = f1
@@ -1890,6 +2010,7 @@ def main(_):
         writer.write("***** Eval results %s *****\n" % (filename))
         for key in sorted(eval_result.keys()):
           tf.logging.info("  %s = %s", key, str(eval_result[key]))
+          tf.logging.info("teacher:  %s = %s", key, str(eval_result_teacher[key]))
           writer.write("%s = %s\n" % (key, str(eval_result[key])))
 
     tf.logging.info("  best f1: {} from {}".format(best_f1, best_ckpt_f1))
@@ -1943,11 +2064,11 @@ def main(_):
       unique_id = int(result["unique_ids"])
       start_logits = [float(x) for x in result["start_logits"].flat]
       end_logits = [float(x) for x in result["end_logits"].flat]
-      all_results.append(
-        RawResult(
-          unique_id=unique_id,
-          start_logits=start_logits,
-          end_logits=end_logits))
+      # all_results.append(
+      #   RawResult(
+      #     unique_id=unique_id,
+      #     start_logits=start_logits,
+      #     end_logits=end_logits))
 
     output_prediction_file = os.path.join(FLAGS.output_dir, "test_predictions.json")
     output_nbest_file = os.path.join(FLAGS.output_dir, "test_nbest_predictions.json")
@@ -1955,7 +2076,7 @@ def main(_):
 
     write_predictions(eval_examples, eval_features, all_results,
                       FLAGS.n_best_size, FLAGS.max_answer_length,
-                      FLAGS.do_lower_case, output_prediction_file,
+                      FLAGS.do_lower_case, output_prediction_file, None,
                       output_nbest_file, output_null_log_odds_file)
 
 
