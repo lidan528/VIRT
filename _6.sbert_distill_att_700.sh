@@ -15,7 +15,7 @@ python _sbert_distill.py \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
   --init_checkpoint=$BERT_BASE_DIR/bert_model.ckpt \
   --init_checkpoint_teacher=$TEACHERT_BASE_DIR/model.ckpt-13000 \
-  --train_batch_size=32 \
+  --train_batch_size=28 \
   --learning_rate=5e-5 \
   --pooling_strategy=mean \
   --num_train_epochs=6.0 \
