@@ -1,8 +1,8 @@
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export TEACHERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/bert_base_bipartition
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/squad #全局变量 数据集所在地址
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/sbert_distill_logit_att_0.7_1000/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/sbert_distill_logit_att_0.5_1000/
 python _sbert_distill.py \
   --task_name=squad \
   --train_file=$MY_DATASET/squad_v1.1-train.jsonl \
@@ -21,6 +21,6 @@ python _sbert_distill.py \
   --num_train_epochs=6.0 \
   --output_dir=$OUTPUT \
   --use_kd_logit=true \
-  --kd_weight_logit=0.7 \
+  --kd_weight_logit=0.5 \
   --use_kd_att=true \
   --kd_weight_att=1000
