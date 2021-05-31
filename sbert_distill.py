@@ -130,6 +130,16 @@ flags.DEFINE_float(
     "The weight of att distillation"
 )
 
+flags.DEFINE_bool(
+    "use_contrast", None,
+    "Whether to use attention distillations"
+)
+
+flags.DEFINE_float(
+    "weight_contrast", None,
+    "The weight of att distillation"
+)
+
 flags.DEFINE_integer("log_step_count_steps", 50, "output log every x steps")
 flags.DEFINE_bool("do_train", False, "Whether to run training.")
 
@@ -1038,6 +1048,22 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("hidden_loss", distill_hidden_loss)
             tf.summary.scalar("hidden_loss_scaled", scaled_hidden_loss)
 
+        # contrast loss....
+        if FLAGS.use_contrast:
+            tf.logging.info('*****use contrast loss...')
+            distill_contrast_loss = contrastive_loss(teacher_model=teacher_output_layer,
+                                          query_model=model_stu_query,
+                                          doc_model=model_stu_doc,
+                                          regular_embedding=regular_embedding,
+                                          input_mask_teacher=input_mask_bert_ab,
+                                          input_mask_query=input_mask_sbert_a,
+                                          input_mask_doc=input_ids_sbert_b,
+                                          mode=FLAGS.layer_distill_mode)
+            scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
+            total_loss = total_loss + scaled_contrast_loss
+            tf.summary.scalar("hidden_loss", distill_contrast_loss)
+            tf.summary.scalar("hidden_loss_scaled", scaled_contrast_loss)
+
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
         assignment_map_teacher, initialized_variable_names_teacher = \
@@ -1379,8 +1405,50 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
         assert 1==2
 
 
+def cos_sim_loss_for_contrast(matrix_a, matrix_b):
+    """
+    matrix_a: batch_size * emb_dim
+    matrix_b: batch_size * emb_dim
+    return: cos_sim contrastive loss
+    """
+    dot_result = tf.matmul(matrix_a, matrix_b, transpose_b=True)
+    norm2_a_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_a), axis=1, keep_dims=True))
+    norm2_b_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_b), axis=1, keep_dims=True))
+    norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)
+    cos_sim = tf.divide(dot_result, norm2_ab)  # batch_size * batch_size
+    cos_sim = tf.nn.softmax(cos_sim, axis=1)
+    batch_size = modeling.get_shape_list(cos_sim, expected_rank=2)[0]
+    diag_sum = tf.reduce_sum(tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim)) / batch_size
+    return diag_sum
 
 
+def contrastive_loss(teacher_model, query_model, doc_model, regular_embedding,
+                     input_mask_teacher, input_mask_query, input_mask_doc, mode):
+    teacher_outputs = teacher_model.get_sequence_output()
+    query_output = query_model.get_sequence_output()
+    doc_output = doc_model.get_sequence_output()
+    if mode == "direct_mean":
+        tf.logging.info('*****use direct mean as hidden pooling...')
+        loss = 0
+        pooled_teacher_layer = get_pooled_embeddings(teacher_outputs, input_mask_teacher)  # [bs, emb_dim]
+        pooled_student_layer = get_pooled_embeddings_for2(query_output, doc_output, input_mask_query, input_mask_doc)
+        # loss += tf.reduce_sum(tf.square(pooled_teacher_layer-pooled_student_layer))     # squared error
+        loss += cos_sim_loss_for_contrast(pooled_teacher_layer, pooled_student_layer)
+        return loss
+    elif mode == "map_mean":
+        tf.logging.info('*****use map mean as hidden pooling...')
+        loss = 0
+        pooled_teacher_layer = get_pooled_embeddings(teacher_outputs, input_mask_teacher)  # [bs, emb_dim]
+        map_weights = tf.get_variable(
+            "map_weights_cts", [teacher_model.hidden_size * 4, teacher_model.hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+        map_bias = tf.get_variable(
+            "map_bias_cts", [teacher_model.hidden_size],
+            initializer=tf.zeros_initializer())
+        mapped_student_layer = tf.matmul(regular_embedding, map_weights)
+        mapped_student_layer = tf.nn.bias_add(mapped_student_layer, map_bias)
+        loss += cos_sim_loss_for_contrast(pooled_teacher_layer, mapped_student_layer)
+        return loss
 
 
 
