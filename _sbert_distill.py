@@ -1407,7 +1407,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
           if end_index_teacher not in feature.token_teacher_to_orig_map:
             continue
           print(feature.token_is_max_context_teacher, '**********************************************************')
-          if not feature.token_is_max_context_teacher.get(start_index_teacher, False):  # start不是在最居中的位置
+          if not feature.token_is_max_context_teacher[0].get(start_index_teacher, False):  # start不是在最居中的位置
             continue
           if end_index_teacher < start_index_teacher:
             continue
