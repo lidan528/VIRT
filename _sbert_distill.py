@@ -1406,7 +1406,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             continue
           if end_index_teacher not in feature.token_teacher_to_orig_map:
             continue
-          print(feature.token_is_max_context_teacher, '**********************************************************')
+          # print(feature.token_is_max_context_teacher, '**********************************************************')
           if not feature.token_is_max_context_teacher[0].get(start_index_teacher, False):  # start不是在最居中的位置
             continue
           if end_index_teacher < start_index_teacher:
@@ -1571,7 +1571,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     for (i, entry) in enumerate(nbest_teacher):
       output = collections.OrderedDict()
       output["text"] = entry.text
-      output["probability"] = probs[i]
+      output["probability"] = probs_teacher[i]
       output["start_logit"] = entry.start_logit
       output["end_logit"] = entry.end_logit
       nbest_json_teacher.append(output)
