@@ -313,6 +313,26 @@ class QqpProcessor(DataProcessor):
                   lines.append(line)
       return lines
 
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
 
 class LcqmcProcessor(DataProcessor):
     """Processor for the meituan data set."""
