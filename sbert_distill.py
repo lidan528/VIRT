@@ -1061,8 +1061,8 @@ def model_fn_builder(bert_config,
                                           mode=FLAGS.layer_distill_mode)
             scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
             total_loss = total_loss + scaled_contrast_loss
-            tf.summary.scalar("hidden_loss", distill_contrast_loss)
-            tf.summary.scalar("hidden_loss_scaled", scaled_contrast_loss)
+            tf.summary.scalar("contrast_loss", distill_contrast_loss)
+            tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
@@ -1417,8 +1417,7 @@ def cos_sim_loss_for_contrast(matrix_a, matrix_b):
     norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)
     cos_sim = tf.divide(dot_result, norm2_ab)  # batch_size * batch_size
     cos_sim = tf.nn.softmax(cos_sim, axis=1)
-    batch_size = modeling.get_shape_list(cos_sim, expected_rank=2)[0]
-    diag_sum = tf.reduce_sum(tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim)) / batch_size
+    diag_sum = tf.reduce_sum(tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim))
     return diag_sum
 
 
