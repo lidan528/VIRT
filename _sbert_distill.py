@@ -1388,8 +1388,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                   feature_index=feature_index,              # 从0开始, 同一doc中的不同span的idx
                   start_index=start_index,                  # 预测的得分在前n_best_size且合法的，start_token在BERT输入中的index
                   end_index=end_index,
-                  start_logit=result.start_logits[start_index],         # 得分值
-                  end_logit=result.end_logits[end_index]))
+                  start_logit=result.start_logits_student[start_index],         # 得分值
+                  end_logit=result.end_logits_student[end_index]))
                                                         # 这样最多可以得到 n_best * n_best个区间的预测结果
       for start_index_teacher in start_indexes_teacher:
         for end_index_teacher in end_indexes_teacher:
