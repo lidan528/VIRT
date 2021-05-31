@@ -3,7 +3,7 @@ export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_ber
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/qqp/ #全局变量 数据集所在地址
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/qqp/bert_base_bipartition_mean_pool/
 python run_classifier_bipartition.py \
-  --task_name=mnli \
+  --task_name=qqp \
   --do_train=true \
   --do_eval=true \
   --do_predict=false \
