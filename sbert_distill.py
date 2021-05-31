@@ -1051,7 +1051,7 @@ def model_fn_builder(bert_config,
         # contrast loss....
         if FLAGS.use_contrast:
             tf.logging.info('*****use contrast loss...')
-            distill_contrast_loss = contrastive_loss(teacher_model=teacher_output_layer,
+            distill_contrast_loss = contrastive_loss(teacher_model=model_teacher,
                                           query_model=model_stu_query,
                                           doc_model=model_stu_doc,
                                           regular_embedding=regular_embedding,
