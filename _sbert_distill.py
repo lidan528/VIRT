@@ -1022,40 +1022,41 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
     for var_ in vars_student:
       vars_teacher.remove(var_)
 
-    start_positions = features["start_positions"]
-    end_positions = features["end_positions"]
-    seq_length_doc = modeling.get_shape_list(input_ids_doc)[1]
-    start_loss = get_loss(start_logits_student, start_positions, seq_length_doc)
-    end_loss = get_loss(end_logits_student, end_positions, seq_length_doc)
-    regular_loss = (start_loss + end_loss) / 2.0
-    total_loss = regular_loss
-    tf.summary.scalar("regular_loss", regular_loss)
+    if is_training:
+      start_positions = features["start_positions"]
+      end_positions = features["end_positions"]
+      seq_length_doc = modeling.get_shape_list(input_ids_doc)[1]
+      start_loss = get_loss(start_logits_student, start_positions, seq_length_doc)
+      end_loss = get_loss(end_logits_student, end_positions, seq_length_doc)
+      regular_loss = (start_loss + end_loss) / 2.0
+      total_loss = regular_loss
+      tf.summary.scalar("regular_loss", regular_loss)
 
-    if FLAGS.use_kd_logit:
-      tf.logging.info('use KL- of logits as distill object...')
-      kd_logit_loss = get_distill_logit_loss(
-                        start_logit_teacher=start_logits_teacher,
-                        end_logit_teacher=end_logits_teacher,
-                        start_logit_student=start_logits_student,
-                        end_logit_student=end_logits_student
-      )
-      scaled_logit_loss = FLAGS.kd_weight_logit * kd_logit_loss
-      total_loss = regular_loss + scaled_logit_loss
-      tf.summary.scalar("logit_loss_kl", kd_logit_loss)
-      tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
+      if FLAGS.use_kd_logit:
+        tf.logging.info('use KL- of logits as distill object...')
+        kd_logit_loss = get_distill_logit_loss(
+                          start_logit_teacher=start_logits_teacher,
+                          end_logit_teacher=end_logits_teacher,
+                          start_logit_student=start_logits_student,
+                          end_logit_student=end_logits_student
+        )
+        scaled_logit_loss = FLAGS.kd_weight_logit * kd_logit_loss
+        total_loss = regular_loss + scaled_logit_loss
+        tf.summary.scalar("logit_loss_kl", kd_logit_loss)
+        tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
 
-      ## attention loss
-    if FLAGS.use_kd_att:
-      tf.logging.info('use att as distill object...')
-      distill_loss_att = get_attention_loss(model_student_query=model_query,
-                                            model_student_doc=model_doc,
-                                            model_teacher=model_teacher,
-                                            input_mask_sbert_query=input_mask_query,
-                                            input_mask_sbert_doc=input_mask_doc)
-      scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
-      total_loss = total_loss + scaled_att_loss
-      tf.summary.scalar("att_loss", distill_loss_att)
-      tf.summary.scalar("att_loss_scaled", scaled_att_loss)
+        ## attention loss
+      if FLAGS.use_kd_att:
+        tf.logging.info('use att as distill object...')
+        distill_loss_att = get_attention_loss(model_student_query=model_query,
+                                              model_student_doc=model_doc,
+                                              model_teacher=model_teacher,
+                                              input_mask_sbert_query=input_mask_query,
+                                              input_mask_sbert_doc=input_mask_doc)
+        scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
+        total_loss = total_loss + scaled_att_loss
+        tf.summary.scalar("att_loss", distill_loss_att)
+        tf.summary.scalar("att_loss_scaled", scaled_att_loss)
 
     assignment_map_teacher, initialized_variable_names_teacher = \
       modeling.get_assignment_map_from_checkpoint_teacher(
