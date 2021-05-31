@@ -948,22 +948,37 @@ def main(_):
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
-        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+        steps_and_files = []
+        filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
+        for file in filenames:
+            if file.endswith(".index"):
+                ckpt_name = file[:-6]
+                cur_filename = os.path.join(FLAGS.output_dir, ckpt_name)
+                global_step = int(cur_filename.split("-")[-1])
+                steps_and_files.append((global_step, cur_filename))
+                tf.logging.info("add {} to eval list...".format(cur_filename))
 
-        output_eval_file = os.path.join(FLAGS.output_dir, task_name+"eval_results.txt")
+        steps_and_files = sorted(steps_and_files, key=lambda x: x[0])
+
+        best_metric, best_ckpt = 0, ''
+        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
         with tf.gfile.GFile(output_eval_file, "w") as writer:
-            tf.logging.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                if key.startswith("eval"):
-                    tf.logging.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
-            # pre = result["eval_pre"]
-            # rec = result["eval_rec"]
-            # if pre == 0 and rec == 0:
-            #     fscore = 0
-            # else:
-            #     fscore = 2 * pre * rec / (pre + rec)
-            # writer.write("%s = %s\n" % ("eval_fscore", str(fscore)))
+            for global_step, filename in steps_and_files:
+                result = estimator.evaluate(input_fn=eval_input_fn,
+                                            # steps=eval_steps)
+                                            checkpoint_path=filename)
+                cur_acc = result["eval_accuracy"]
+                if cur_acc > best_metric:
+                    best_metric = cur_acc
+                    best_ckpt = filename
+                tf.logging.info("***** Eval results of step-{} *****".format(global_step))
+                writer.write("***** Eval results of step-{} *****".format(global_step))
+                for key in sorted(result.keys()):
+                    if key.startswith("eval"):
+                        tf.logging.info("  %s = %s", key, str(result[key]))
+                        writer.write("%s = %s\n" % (key, str(result[key])))
+
+        tf.logging.info("*****Best eval results: {} from {}  *****".format(best_metric, best_ckpt))
 
     if FLAGS.do_predict:
         predict_examples = processor.get_test_examples(FLAGS.data_dir, FLAGS.test_flie_name)
