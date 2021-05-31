@@ -7,7 +7,7 @@ python _sbert_distill.py \
   --task_name=squad \
   --train_file=$MY_DATASET/squad_v1.1-train.jsonl \
   --dev_file=$MY_DATASET/squad_v1.1-dev.jsonl \
-  --do_train=true \
+  --do_train=false \
   --do_eval=true \
   --do_predict=false \
   --data_dir=$MY_DATASET \
