@@ -399,6 +399,61 @@ class MnliProcessor(DataProcessor):
     return examples
 
 
+class QqpProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-dev.jsonl")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-test.jsonl")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
+
 # def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
 #                            tokenizer):
 #     """Converts a single `InputExample` into a single `InputFeatures`."""
@@ -1476,7 +1531,8 @@ def main(_):
 
     processors = {
         "lcqmc": LcqmcProcessor,
-        "mnli": MnliProcessor
+        "mnli": MnliProcessor,
+        "qqp": QqpProcessor
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
