@@ -831,9 +831,9 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     processors = {
-        "lcqmc": LcqmcProcessor,
         "mnli": MnliProcessor,
-        "qqp": QqpProcessor
+        "qqp": QqpProcessor,
+        "boolq": BoolqProcessor
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
