@@ -2,7 +2,7 @@ export CUDA_VISIBLE_DEVICES=3
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/boolq/ #全局变量 数据集所在地址
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/bert_base_bipartition_mean_pool/
-python run_classifier_bipartition.py \
+python --run_classifier_boolq.py \
   --task_name=boolq \
   --do_train=true \
   --do_eval=true \
