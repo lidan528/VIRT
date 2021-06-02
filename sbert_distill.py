@@ -1115,7 +1115,7 @@ def model_fn_builder(bert_config,
 
         # contrast loss teacher....
         if FLAGS.use_contrast_teacher_separately:
-            tf.logging.info('*****use contrast loss self...')
+            tf.logging.info('*****use contrast loss teacher...')
             distill_contrast_loss = contrastive_loss_teacher_separately(teacher_model=model_teacher,
                                           query_model=model_stu_query,
                                           doc_model=model_stu_doc,
@@ -1571,13 +1571,13 @@ def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
         doc_model.all_encoder_layers
     loss, cnt = 0, 0
     for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
-        pooled_query_layer = get_pooled_embeddings(query_layer[:, 1:-1, :], input_mask_query[:, 1:-1, :])  # [bs, emb_dim]
-        pooled_doc_layer = get_pooled_embeddings(doc_layer[:, 1:-1, :], input_mask_doc[:, 1:-1, :])  # [bs, emb_dim]
+        pooled_query_layer = get_pooled_embeddings(query_layer[:, 1:-1, :], input_mask_query[:, 1:-1])  # [bs, emb_dim]
+        pooled_doc_layer = get_pooled_embeddings(doc_layer[:, 1:-1, :], input_mask_doc[:, 1:-1])  # [bs, emb_dim]
 
         query_length = modeling.get_shape_list(query_layer, expected_rank=3)[1]   #[bs, query_len, emb_dim]
         # doc_length = modeling.get_shape_list(doc_layer, expected_rank=3)[1]
-        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length-1, :], input_mask_teacher[:, 1:query_length-1, :])
-        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :], input_mask_teacher[:, query_length:-1, :])
+        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length-1, :], input_mask_teacher[:, 1:query_length-1])
+        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :], input_mask_teacher[:, query_length:-1])
 
         loss_query = cos_sim_loss_for_contrast(teacher_query, pooled_query_layer)
         loss_doc = cos_sim_loss_for_contrast(teacher_doc, pooled_doc_layer)
