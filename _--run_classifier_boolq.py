@@ -850,7 +850,8 @@ def main(_):
 
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
-  if FLAGS.max_seq_length > bert_config.max_position_embeddings:
+  total_length = 1 + FLAGS.max_seq_length_query-2 + 1 + FLAGS.max_seq_length_doc-2 + 1
+  if total_length > bert_config.max_position_embeddings:
     raise ValueError(
         "Cannot use sequence length %d because the BERT model "
         "was only trained up to sequence length %d" %
