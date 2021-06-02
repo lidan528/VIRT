@@ -364,7 +364,7 @@ class BoolqProcessor(DataProcessor):
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
-    examples = [0,1]
+    examples = []
     for (i, line) in enumerate(lines):
       # if i == 0:
       #   continue
