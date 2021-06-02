@@ -13,7 +13,7 @@ python _--run_classifier_boolq.py \
   --init_checkpoint=$BERT_BASE_DIR/bert_model.ckpt \
   --max_seq_length_query=64 \
   --max_seq_length_doc=328 \
-  --train_batch_size=40 \
+  --train_batch_size=28 \
   --learning_rate=5e-5 \
   --num_train_epochs=6.0 \
   --output_dir=$OUTPUT \
