@@ -131,9 +131,15 @@ flags.DEFINE_float(
 )
 
 flags.DEFINE_bool(
-    "use_contrast", None,
-    "Whether to use attention distillations"
+    "use_contrast_self", None,
+    "Whether to use attention distillations self"
 )
+
+flags.DEFINE_bool(
+    "use_contrast_teacher_separately", None,
+    "Whether to use attention distillations self"
+)
+
 
 flags.DEFINE_float(
     "weight_contrast", None,
@@ -1014,17 +1020,7 @@ def model_fn_builder(bert_config,
                                                     scope = "bert_student",
                                                     is_reuse = tf.AUTO_REUSE)
 
-        # else:
-        #     input_ids_a = features["input_ids_a"]
-        #     input_mask_a = features["input_mask_a"]
-        #     segment_ids_a = features["segment_ids_a"]
-        #     query_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
-        #                                    use_one_hot_embeddings)
-        #     doc_embedding, _ = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a,
-        #                                  use_one_hot_embeddings)
-        #     label_ids = 0
-        # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
-        #    query_id = features["id"]
+
         sub_embedding = tf.abs(query_embedding - doc_embedding)
         max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
         regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
@@ -1033,7 +1029,6 @@ def model_fn_builder(bert_config,
                                    num_labels=num_rele_label,
                                    is_training=is_training)
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
-
 
         teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
                                                     input_ids = input_ids_bert_ab,
@@ -1103,21 +1098,37 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("hidden_loss", distill_hidden_loss)
             tf.summary.scalar("hidden_loss_scaled", scaled_hidden_loss)
 
-        # contrast loss....
-        if FLAGS.use_contrast:
-            tf.logging.info('*****use contrast loss...')
-            distill_contrast_loss = contrastive_loss(teacher_model=model_teacher,
+        # contrast loss self....
+        if FLAGS.use_contrast_self:
+            tf.logging.info('*****use contrast loss self...')
+            distill_contrast_loss = contrastive_loss_self(teacher_model=model_teacher,
                                           query_model=model_stu_query,
                                           doc_model=model_stu_doc,
-                                          regular_embedding=regular_embedding,
                                           input_mask_teacher=input_mask_bert_ab,
                                           input_mask_query=input_mask_sbert_a,
                                           input_mask_doc=input_ids_sbert_b,
-                                          mode=FLAGS.layer_distill_mode)
+                                          truth_labels=label_ids)
             scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
             total_loss = total_loss + scaled_contrast_loss
-            tf.summary.scalar("contrast_loss", distill_contrast_loss)
+            tf.summary.scalar("contrast_loss_self", distill_contrast_loss)
             tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
+
+        # contrast loss teacher....
+        if FLAGS.use_contrast_teacher_separately:
+            tf.logging.info('*****use contrast loss self...')
+            distill_contrast_loss = contrastive_loss_teacher_separately(teacher_model=model_teacher,
+                                          query_model=model_stu_query,
+                                          doc_model=model_stu_doc,
+                                          input_mask_teacher=input_mask_bert_ab,
+                                          input_mask_query=input_mask_sbert_a,
+                                          input_mask_doc=input_ids_sbert_b,
+                                          truth_labels=label_ids)
+            scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
+            total_loss = total_loss + scaled_contrast_loss
+            tf.summary.scalar("contrast_loss_teacher", distill_contrast_loss)
+            tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
+
+
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
@@ -1505,6 +1516,74 @@ def contrastive_loss(teacher_model, query_model, doc_model, regular_embedding,
         return loss
 
 
+
+def contrastive_loss_self(teacher_model, query_model, doc_model,
+                          input_mask_teacher, input_mask_query, input_mask_doc,
+                          truth_labels):
+    """
+    在双塔内部进行对比学习，即对于输入的文本对 S1 S2，
+    如果S1与S2的标签是吻合，就将其作为正例；并将同batch内对面的所有其他输入作为负例；
+    暂时只计算一个塔
+    """
+    def cos_loss_self(matrix_a, matrix_b, label_mask):
+        """
+        label_mask: 代表哪个是正例，即语义是吻合的, label为1  [bs]
+        """
+        dot_result = tf.matmul(matrix_a, matrix_b, transpose_b=True)            #[bs , bs]   dot
+        norm2_a_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_a), axis=1, keep_dims=True))    #[bs, 1]  |a|
+        norm2_b_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_b), axis=1, keep_dims=True))    #[bs, 1], |b|
+        norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)                  #[bs, bs], |a||b|
+        cos_sim = tf.divide(dot_result, norm2_ab)  # batch_size * batch_size
+        cos_sim = tf.nn.softmax(cos_sim, axis=1)
+        diag_elem = tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim)      #[bs, bs] only diag remained
+        label_mask = tf.cast(tf.expand_dims(label_mask, axis=-1), dtype=tf.float32)     #[bs, 1]
+        matched_diag_elem = tf.multiply(diag_elem, label_mask)
+        loss = tf.reduce_sum(matched_diag_elem)
+        return loss
+
+    all_teacher_layers, all_query_layers, all_doc_layers = \
+        teacher_model.all_encoder_layers, \
+        query_model.all_encoder_layers, \
+        doc_model.all_encoder_layers
+    loss, cnt = 0, 0
+    for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
+        pooled_query_layer = get_pooled_embeddings(query_layer, input_mask_query)  # [bs, emb_dim]
+        pooled_doc_layer = get_pooled_embeddings(doc_layer, input_mask_doc)  # [bs, emb_dim]
+        loss += cos_loss_self(pooled_query_layer, pooled_doc_layer, truth_labels)
+        cnt += 1
+
+    return loss / cnt
+
+
+def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
+                          input_mask_teacher, input_mask_query, input_mask_doc,
+                          truth_labels):
+    """
+    teacher半段以query为正例，以同batch其他query内为负例;  后半段类似
+        q1, q2, q3
+    t1  *
+    t2      *
+    t3          *
+    """
+    all_teacher_layers, all_query_layers, all_doc_layers = \
+        teacher_model.all_encoder_layers, \
+        query_model.all_encoder_layers, \
+        doc_model.all_encoder_layers
+    loss, cnt = 0, 0
+    for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
+        pooled_query_layer = get_pooled_embeddings(query_layer[:, 1:-1, :], input_mask_query[:, 1:-1, :])  # [bs, emb_dim]
+        pooled_doc_layer = get_pooled_embeddings(doc_layer[:, 1:-1, :], input_mask_doc[:, 1:-1, :])  # [bs, emb_dim]
+
+        query_length = modeling.get_shape_list(query_layer, expected_rank=3)[1]   #[bs, query_len, emb_dim]
+        # doc_length = modeling.get_shape_list(doc_layer, expected_rank=3)[1]
+        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length-1, :], input_mask_teacher[:, 1:query_length-1, :])
+        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :], input_mask_teacher[:, query_length:-1, :])
+
+        loss_query = cos_sim_loss_for_contrast(teacher_query, pooled_query_layer)
+        loss_doc = cos_sim_loss_for_contrast(teacher_doc, pooled_doc_layer)
+        loss += (loss_query + loss_doc) / 2.0
+        cnt += 1
+    return loss / cnt
 
 
 def kl(p, q):
