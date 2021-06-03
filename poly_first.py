@@ -6,6 +6,7 @@ import os
 import codecs
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers import initializers
+import json
 
 import pickle
 import csv
@@ -13,11 +14,10 @@ import csv
 import modeling, tokenization,optimization
 import collections
 import random
-import math
 
 import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
+# reload(sys)
+# sys.setdefaultencoding('utf-8')
 
 flags = tf.flags
 
@@ -27,12 +27,12 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("data_dir", None,"data path")
 
 flags.DEFINE_string(
-    "test_flie_name", None,
-    "test_file_name.")
+     "test_flie_name", None,
+     "test_file_name.")
 
 flags.DEFINE_string(
     "train_data_path", None,
-    "The input data path. Should contain the .tsv files (or other data files) "
+    "The input data path. Should contain the .tsv files (or other data files) "    
     "for the task.")
 
 flags.DEFINE_string(
@@ -139,7 +139,6 @@ flags.DEFINE_integer(
 flags.DEFINE_string("ner_label_file", None, "ner label files")
 
 flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
-flags.DEFINE_string("poly_first_m", 16, "number of keep doc embeddings.")
 
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
@@ -214,16 +213,125 @@ class DataProcessor(object):
 
     @classmethod
     def _horovod_read_file_single_mode(cls, input_file, quotechar):
-        with tf.gfile.GFile(input_file, "r") as reader:
-            lines = []
-            while True:
-                line = reader.readline()
-                if not line:
-                    break
-                attr = line.strip().split('\t')
-                lines.append(attr)
-            return lines
+         with tf.gfile.GFile(input_file, "r") as reader:
+             lines = []
+             while True:
+                 line = reader.readline()
+                 if not line:
+                     break
+                 attr = line.strip().split('\t')
+                 lines.append(attr)
+             return lines
 
+
+class MnliProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-dev.jsonl")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "mnli-test.jsonl")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1, 2]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
+
+class QqpProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-dev.jsonl")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-test.jsonl")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
 
 
 class LcqmcProcessor(DataProcessor):
@@ -261,7 +369,7 @@ class LcqmcProcessor(DataProcessor):
             #         raise ValueError("Relation predict file columns must be 2")
             # else:
             #if len(line) < 2:
-            #raise ValueError("The {0} colums must be 5".format(i))
+                #raise ValueError("The {0} colums must be 5".format(i))
             guid = "%s-%s" % (set_type, i)
             text_a = tokenization.convert_to_unicode(line[0])
             text_b = tokenization.convert_to_unicode(line[1])
@@ -315,27 +423,69 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
     # used as as the "sentence vector". Note that this only makes sense because
     # the entire model is fine-tuned.
 
-    def build_bert_input(tokens_temp):
+    # def build_bert_input(tokens_temp):
+    #     tokens_p = []
+    #     segment_ids = []
+    #
+    #     tokens_p.append("[CLS]")
+    #     segment_ids.append(0)
+    #
+    #     for token in tokens_temp:
+    #         tokens_p.append(token)
+    #         segment_ids.append(0)
+    #
+    #     tokens_p.append("[SEP]")
+    #     segment_ids.append(0)
+    #
+    #     input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
+    #     input_mask = [1] * len(input_ids)
+    #
+    #     while len(input_ids) < max_seq_length:
+    #         input_ids.append(0)
+    #         input_mask.append(0)
+    #         segment_ids.append(0)
+    #
+    #     assert len(input_ids) == max_seq_length
+    #     assert len(input_mask) == max_seq_length
+    #     assert len(segment_ids) == max_seq_length
+    #
+    #     if ex_index < 5:
+    #         tf.logging.info("*** Example ***")
+    #         tf.logging.info("guid: %s" % (example.guid))
+    #         tf.logging.info("tokens: %s" % " ".join(
+    #             [tokenization.printable_text(x) for x in tokens_p]))
+    #
+    #         tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+    #         tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+    #         tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+    #
+    #
+    #     return input_ids,input_mask,segment_ids
+
+    def build_bert_input_s_bert(tokens_temp):
+
+        if len(tokens_temp) > max_seq_length - 2:
+            tokens_temp = tokens_temp[0: (max_seq_length - 2)]
+
         tokens_p = []
         segment_ids = []
-
         tokens_p.append("[CLS]")
         segment_ids.append(0)
 
         for token in tokens_temp:
             tokens_p.append(token)
             segment_ids.append(0)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
+        input_mask = [1] * len(input_ids)  # [CLS], a,a,a
 
-        tokens_p.append("[SEP]")
-        segment_ids.append(0)
-
-        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
-        input_mask = [1] * len(input_ids)
-
-        while len(input_ids) < max_seq_length:
+        while len(input_ids) < max_seq_length-1: # [CLS], a,a,a,<PAD>,
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
+        tokens_p.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])     # [CLS], a,a,a,<PAD>, [SEP]
+        input_mask.append(1)
+        segment_ids.append(0)
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
@@ -351,17 +501,13 @@ def convert_single_example(ex_index, example, rele_label_list, max_seq_length,
             tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
 
+        return input_ids, input_mask, segment_ids
 
-        return input_ids,input_mask,segment_ids
-
-    input_ids_a, input_mask_a, segment_ids_a = build_bert_input(tokens_a)
-    input_ids_b, input_mask_b, segment_ids_b = build_bert_input(tokens_b)
+    input_ids_a, input_mask_a, segment_ids_a = build_bert_input_s_bert(tokens_a)
+    input_ids_b, input_mask_b, segment_ids_b = build_bert_input_s_bert(tokens_b)
 
 
     label_id = label_map[example.label]
-
-    if ex_index < 5:
-        tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
 
     feature = InputFeatures(input_ids_a, input_mask_a, segment_ids_a,input_ids_b, input_mask_b, segment_ids_b, label_id)
 
@@ -481,15 +627,18 @@ def file_based_input_fn_builder(input_file, seq_length, is_training,
 
 
 def create_model(bert_config, is_training, input_ids, input_mask,
-                 segment_ids, use_one_hot_embeddings, pooling=False):
-
+                 segment_ids, use_one_hot_embeddings, is_reuse, pooling):
+    
     model = modeling.BertModel(
         config=bert_config,
         is_training=is_training,
         input_ids=input_ids,
         input_mask=input_mask,
         token_type_ids=segment_ids,
-        use_one_hot_embeddings=use_one_hot_embeddings)
+        use_one_hot_embeddings=use_one_hot_embeddings,
+        scope="bert",
+        is_reuse=is_reuse
+    )
 
     output_layer = None
 
@@ -506,20 +655,22 @@ def create_model(bert_config, is_training, input_ids, input_mask,
             # delete cls and sep
             #a = tf.cast(tf.reduce_sum(input_mask, axis=-1) - 1, tf.int32)
             #last = tf.one_hot(a, depth=FLAGS.max_seq_length)
-
             #b = tf.zeros([tf.shape(input_ids)[0]], tf.int32)
             #first = tf.one_hot(b, depth=FLAGS.max_seq_length)
             #input_mask_sub2 = tf.cast(input_mask, dtype=tf.float32)
             #input_mask_sub2 = input_mask_sub2 - first - last
-
             #input_mask3 = tf.cast(tf.reshape(input_mask_sub2, [-1, FLAGS.max_seq_length, 1]), tf.float32)
             #output_layer = output_layer * input_mask3
 
-            #average pooling
-            #length = tf.reduce_sum(input_mask3, axis=1)
-            token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
-            #output_layer = token_embedding_sum/length
-            output_layer = token_embedding_sum/FLAGS.max_seq_length
+
+            # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
+            # output_layer = token_embedding_sum/FLAGS.max_seq_length
+            mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+            masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+            sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
+            actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+            actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
+            output_layer = sum_masked_output_layer / actual_token_nums
         else:
             tf.logging.info("pooling_strategy error")
             assert 1==2
@@ -528,7 +679,7 @@ def create_model(bert_config, is_training, input_ids, input_mask,
 
     return output_layer
 
-
+import math
 def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
                      use_one_hot_embeddings):
@@ -540,7 +691,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         tf.logging.info("*** Features ***")
         for name in sorted(features.keys()):
             tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
-
+      
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
         if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
@@ -551,23 +702,18 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_b = features["input_mask_b"]
             segment_ids_b = features["segment_ids_b"]
             label_ids = features["label_ids"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings,
-                                           pooling=True)
-            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings,
-                                         pooling=False)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
+            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings, tf.AUTO_REUSE)
         else:
             input_ids_a = features["input_ids_a"]
             input_mask_a = features["input_mask_a"]
             segment_ids_a = features["segment_ids_a"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings,
-                                           pooling=True)
-            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings,
-                                         pooling=False)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
+            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
             label_ids = 0
-        # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
-        #    query_id = features["id"]
+           # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
+            #    query_id = features["id"]
 
-        # dot attention
         def dot_attention(q, k, v, v_mask=None, dropout=None):
             # v_mask [B, T]
             attention_scores = tf.matmul(q, k, transpose_b=True)
@@ -592,6 +738,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
         per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
         regular_loss = tf.reduce_mean(per_example_loss)
+
 
         # (ner_loss, _, _, pred_ids) = ner_part
         # (rele_loss, per_example_loss, _, probabilities) = rele_part
@@ -653,7 +800,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
                 return {
                     "eval_pre": precision,
                     "eval_rec": recall,
-                    #   "eval_f1": f1,
+                 #   "eval_f1": f1,
                     "eval_accuracy": accuracy,
                     "eval_auc": auc,
                 }
@@ -688,6 +835,8 @@ def main(_):
 
     processors = {
         "lcqmc": LcqmcProcessor,
+        "mnli": MnliProcessor,
+        "qqp": QqpProcessor
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
@@ -766,7 +915,7 @@ def main(_):
     #         examples, ner_label_map, label_list, max_seq_length, tokenizer, output_file, is_training=False):
 
     if FLAGS.do_train:
-        train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
+        train_file = os.path.join(FLAGS.output_dir, task_name+"train.tf_record")
         if tf.gfile.Exists(train_file):
             print("train file exists")
         else:
@@ -785,7 +934,7 @@ def main(_):
 
     if FLAGS.do_eval:
         eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-        eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+        eval_file = os.path.join(FLAGS.output_dir, task_name+"eval.tf_record")
 
         if not tf.gfile.Exists(eval_file):
             file_based_convert_examples_to_features(
@@ -813,26 +962,41 @@ def main(_):
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
-        result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+        steps_and_files = []
+        filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
+        for file in filenames:
+            if file.endswith(".index"):
+                ckpt_name = file[:-6]
+                cur_filename = os.path.join(FLAGS.output_dir, ckpt_name)
+                global_step = int(cur_filename.split("-")[-1])
+                steps_and_files.append((global_step, cur_filename))
+                tf.logging.info("add {} to eval list...".format(cur_filename))
 
+        steps_and_files = sorted(steps_and_files, key=lambda x: x[0])
+
+        best_metric, best_ckpt = 0, ''
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
         with tf.gfile.GFile(output_eval_file, "w") as writer:
-            tf.logging.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                if key.startswith("eval"):
-                    tf.logging.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
-            # pre = result["eval_pre"]
-            # rec = result["eval_rec"]
-            # if pre == 0 and rec == 0:
-            #     fscore = 0
-            # else:
-            #     fscore = 2 * pre * rec / (pre + rec)
-            # writer.write("%s = %s\n" % ("eval_fscore", str(fscore)))
+            for global_step, filename in steps_and_files:
+                result = estimator.evaluate(input_fn=eval_input_fn,
+                                            # steps=eval_steps)
+                                            checkpoint_path=filename)
+                cur_acc = result["eval_accuracy"]
+                if cur_acc > best_metric:
+                    best_metric = cur_acc
+                    best_ckpt = filename
+                tf.logging.info("***** Eval results of step-{} *****".format(global_step))
+                writer.write("***** Eval results of step-{} *****".format(global_step))
+                for key in sorted(result.keys()):
+                    if key.startswith("eval"):
+                        tf.logging.info("  %s = %s", key, str(result[key]))
+                        writer.write("%s = %s\n" % (key, str(result[key])))
+
+        tf.logging.info("*****Best eval results: {} from {}  *****".format(best_metric, best_ckpt))
 
     if FLAGS.do_predict:
         predict_examples = processor.get_test_examples(FLAGS.data_dir, FLAGS.test_flie_name)
-        predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+        predict_file = os.path.join(FLAGS.output_dir, task_name+"predict.tf_record")
 
         if not tf.gfile.Exists(predict_file):
             file_based_convert_examples_to_features(predict_examples, label_list,FLAGS.max_seq_length, tokenizer, predict_file)
@@ -859,11 +1023,11 @@ def main(_):
         #test_result = estimator.evaluate(input_fn=predict_input_fn, steps=eval_steps)
         #output_test_file = os.path.join(FLAGS.output_dir, "test_results.txt")
         #with tf.gfile.GFile(output_test_file, "w") as writer:
-        #tf.logging.info("***** test results *****")
-        #for key in sorted(test_result.keys()):
-        #tf.logging.info("  %s = %s", key, str(test_result[key]))
-        #writer.write("%s = %s\n" % (key, str(test_result[key])))
-
+            #tf.logging.info("***** test results *****")
+            #for key in sorted(test_result.keys()):
+                #tf.logging.info("  %s = %s", key, str(test_result[key]))
+                #writer.write("%s = %s\n" % (key, str(test_result[key])))
+                
         result = estimator.predict(input_fn=predict_input_fn)
 
         output_predict_file = os.path.join(FLAGS.output_dir, "predict_results.tsv")
@@ -873,7 +1037,7 @@ def main(_):
                 #output_line = str(prediction[1]) + "\n"
                 output_line = ",".join(str(class_probability) for class_probability in prediction) + "\n"
                 writer.write(output_line)
-
+    
     if FLAGS.do_save:
         estimator._export_to_tpu = False
         estimator.export_savedmodel(FLAGS.output_dir,serving_input_receiver_fn=serving_input_receiver_fn(FLAGS.max_seq_length))
