@@ -140,6 +140,8 @@ flags.DEFINE_string("ner_label_file", None, "ner label files")
 
 flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
 
+flags.DEFINE_integer("poly_first_m", 16, "number of poly embeddings")
+
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
 class InputExample(object):
@@ -702,14 +704,18 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_b = features["input_mask_b"]
             segment_ids_b = features["segment_ids_b"]
             label_ids = features["label_ids"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
-            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings, tf.AUTO_REUSE)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
+                                           pooling=True)
+            doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings, tf.AUTO_REUSE,
+                                         pooling=False)
         else:
             input_ids_a = features["input_ids_a"]
             input_mask_a = features["input_mask_a"]
             segment_ids_a = features["segment_ids_a"]
-            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
-            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE)
+            query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
+                                           pooling=True)
+            doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
+                                         pooling=False)
             label_ids = 0
            # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
             #    query_id = features["id"]
@@ -729,7 +735,9 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             output = tf.matmul(attention_probs, v)
             return output
         doc_embedding = doc_embedding[:, :FLAGS.poly_first_m, :]
-        final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=input_mask_b)
+        query_embedding = tf.expand_dims(query_embedding, axis=[1])
+        poly_mask = input_mask_b[:, :FLAGS.poly_first_m]
+        final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=poly_mask)
 
         logits = tf.layers.dense(final_vecs, units=num_rele_label)
         probabilities = tf.nn.softmax(logits, axis=-1)
