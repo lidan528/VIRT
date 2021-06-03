@@ -15,6 +15,6 @@ python _--run_classifier_boolq.py \
   --max_seq_length_doc=328 \
   --train_batch_size=28 \
   --learning_rate=5e-5 \
-  --num_train_epochs=20.0 \
+  --num_train_epochs=30.0 \
   --output_dir=$OUTPUT \
   --pooling_strategy=mean
