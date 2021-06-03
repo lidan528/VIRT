@@ -140,6 +140,8 @@ flags.DEFINE_string("ner_label_file", None, "ner label files")
 
 flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
 
+flags.DEFINE_integer("poly_first_m", 16, "number of poly embeddings")
+
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
 class InputExample(object):
