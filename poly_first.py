@@ -735,6 +735,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             output = tf.matmul(attention_probs, v)
             return output
         doc_embedding = doc_embedding[:, :FLAGS.poly_first_m, :]
+        query_embedding = tf.expand_dims(query_embedding, axis=[1])
         final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=input_mask_b)
 
         logits = tf.layers.dense(final_vecs, units=num_rele_label)
