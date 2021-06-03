@@ -77,14 +77,14 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length_bert", 130,
+    "max_seq_length_query", None,
     "The maximum total input sequence length after WordPiece tokenization. "
     "In the origin bert model"
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
 
 flags.DEFINE_integer(
-    "max_seq_length_sbert", 259,
+    "max_seq_length_doc", None,
     "The maximum total input sequence length after WordPiece tokenization. "
     "In the s-bert model."
     "Sequences longer than this will be truncated, and sequences shorter "
@@ -553,8 +553,62 @@ class QqpProcessor(DataProcessor):
 #
 #     return feature
 
+class BoolqProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
 
-def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_bert, max_seq_length_s_bert,
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "boolq-train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "boolq-dev.jsonl")),
+        "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_jsnl(os.path.join(data_dir, "qqp-test.jsonl")), "test")
+
+  def get_labels(self):
+    """See base class."""
+    # return ["contradiction", "entailment", "neutral"]
+    return [0, 1]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      # if i == 0:
+      #   continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line['seq1'])
+      text_b = tokenization.convert_to_unicode(line['seq2'])
+      #if set_type == "test":
+      #  label = "contradiction"
+      #else:
+      # label = tokenization.convert_to_unicode(line['label']['cls'])
+      label = line['label']['cls']
+      # if label == tokenization.convert_to_unicode("contradictory"):
+      #   label = tokenization.convert_to_unicode("contradiction")
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
+
+def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_query, max_seq_length_doc,
                            tokenizer):
     """
     由于teacher模型与student模型的输入不一致，所以需要在convert_example中同时赋予两种输入
@@ -601,9 +655,10 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         在双塔模型中, 将sen1与sen2分别设置为对半分开的max_len
         """
         # 交互: [CLS] a,a,a,a,a,a, [SEP], b, b, b, b ,b [SEP]
+        max_seq_length_bert = 1 + max_seq_length_query-2 + 1 + max_seq_length_doc-2 + 1
         max_token_len = max_seq_length_bert - 3
-        max_a_len = max_token_len // 2
-        max_b_len = max_token_len - max_a_len
+        max_a_len = max_seq_length_query - 2
+        max_b_len = max_seq_length_doc - 2
         if len(tokens_tmp_a) > max_a_len:
             tokens_tmp_a = tokens_tmp_a[0:max_a_len]
         if len(tokens_tmp_b) > max_b_len:
@@ -679,10 +734,10 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
     #
     #     return input_ids, input_mask, segment_ids
 
-    def build_bert_input_s_bert(tokens_temp):
+    def build_bert_input_s_bert(tokens_temp, max_len):
 
-        if len(tokens_temp) > max_seq_length_s_bert - 2:
-            tokens_temp = tokens_temp[0: (max_seq_length_s_bert - 2)]
+        if len(tokens_temp) > max_len - 2:
+            tokens_temp = tokens_temp[0: (max_len - 2)]
 
         tokens_p = []
         segment_ids = []
@@ -696,7 +751,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
         input_mask = [1] * len(input_ids)  # [CLS], a,a,a
 
-        while len(input_ids) < max_seq_length_s_bert-1: # [CLS], a,a,a,<PAD>,
+        while len(input_ids) < max_len-1: # [CLS], a,a,a,<PAD>,
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
@@ -705,14 +760,14 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         input_mask.append(1)
         segment_ids.append(0)
 
-        assert len(input_ids) == max_seq_length_s_bert
-        assert len(input_mask) == max_seq_length_s_bert
-        assert len(segment_ids) == max_seq_length_s_bert
+        assert len(input_ids) == max_len
+        assert len(input_mask) == max_len
+        assert len(segment_ids) == max_len
         return input_ids, input_mask, segment_ids
 
     input_ids_bert_ab, input_mask_bert_ab, segment_ids_bert_ab = build_bert_input_bert(tokens_a, tokens_b)
-    input_ids_sbert_a, input_mask_sbert_a, segment_ids_sbert_a = build_bert_input_s_bert(tokens_a)
-    input_ids_sbert_b, input_mask_sbert_b, segment_ids_sbert_b = build_bert_input_s_bert(tokens_b)
+    input_ids_sbert_a, input_mask_sbert_a, segment_ids_sbert_a = build_bert_input_s_bert(tokens_a, max_seq_length_query)
+    input_ids_sbert_b, input_mask_sbert_b, segment_ids_sbert_b = build_bert_input_s_bert(tokens_b, max_seq_length_doc)
 
     label_id = label_map[example.label]
 
@@ -744,7 +799,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
 
 
 def file_based_convert_examples_to_features(
-        examples, label_list, max_seq_length_bert, max_seq_length_s_bert, tokenizer, output_file, is_training=False):
+        examples, label_list, max_seq_length_query, max_seq_length_doc, tokenizer, output_file, is_training=False):
     """Convert a set of `InputExample`s to a TFRecord file."""
 
     writer = tf.python_io.TFRecordWriter(output_file)
@@ -759,7 +814,7 @@ def file_based_convert_examples_to_features(
             tf.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
 
         feature = conver_single_example_distill(ex_index, example, label_list,
-                                         max_seq_length_bert, max_seq_length_s_bert, tokenizer)
+                                         max_seq_length_query, max_seq_length_doc, tokenizer)
 
         if not feature:
             continue
@@ -790,19 +845,20 @@ def file_based_convert_examples_to_features(
     tf.logging.info("proprecessd actual number of tfrecord: {0}".format(count))
 
 
-def file_based_input_fn_builder(input_file, seq_length_bert, seq_length_sbert,
+def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
                                 is_training,
                                 drop_remainder):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
+    seq_length_bert = 1 + seq_length_query-2 + 1 + seq_length_doc-2 + 1
     name_to_features = {
-        "input_ids_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
-        "input_mask_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
-        "segment_ids_sbert_a": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "input_ids_sbert_a": tf.FixedLenFeature([seq_length_query], tf.int64),
+        "input_mask_sbert_a": tf.FixedLenFeature([seq_length_query], tf.int64),
+        "segment_ids_sbert_a": tf.FixedLenFeature([seq_length_query], tf.int64),
 
-        "input_ids_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
-        "input_mask_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
-        "segment_ids_sbert_b": tf.FixedLenFeature([seq_length_sbert], tf.int64),
+        "input_ids_sbert_b": tf.FixedLenFeature([seq_length_doc], tf.int64),
+        "input_mask_sbert_b": tf.FixedLenFeature([seq_length_doc], tf.int64),
+        "segment_ids_sbert_b": tf.FixedLenFeature([seq_length_doc], tf.int64),
 
         "input_ids_bert_ab": tf.FixedLenFeature([seq_length_bert], tf.int64),
         "input_mask_bert_ab": tf.FixedLenFeature([seq_length_bert], tf.int64),
@@ -1284,22 +1340,23 @@ def get_prediction_student(student_output_layer, num_labels, is_training):
     return logits, probabilities, log_probs
 
 
-def create_att_mask(input_mask):
-    """
-    相当于将input_mask列表复制seq_len次
-    得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
-    从而防止input_mask为0的元素被att，但它可以att to别的元素
-    """
-    to_shape = modeling.get_shape_list(input_mask, expected_rank=2)     #[batch-size, seq_len]
-    batch_size = to_shape[0]
-    seq_length = to_shape[1]
-    mask = tf.cast(
-        tf.reshape(input_mask, [batch_size, 1, seq_length]), tf.float32)
-    broadcast_ones = tf.ones(
-        shape=[batch_size, seq_length, 1], dtype=tf.float32)
+def create_att_mask(input_mask, seq_length_another):
+  """
+  相当于将input_mask列表复制seq_len次
+  得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
+  从而防止input_mask为0的元素被att，但它可以att to别的元素
+  如果输入的是mask_doc，那么就要复制query_length次，形成[query_length , mask_doc]的mask
+  """
+  to_shape = modeling.get_shape_list(input_mask, expected_rank=2)  # [batch-size, seq_len]
+  batch_size = to_shape[0]
+  seq_length_self = to_shape[1]
+  mask = tf.cast(
+    tf.reshape(input_mask, [batch_size, 1, seq_length_self]), tf.float32)
+  broadcast_ones = tf.ones(
+    shape=[batch_size, seq_length_another, 1], dtype=tf.float32)
 
-    mask = broadcast_ones * mask
-    return mask
+  mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
+  return mask
 
 
 
@@ -1337,7 +1394,7 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
         query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :], transpose_b=True)  #[bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,
                                  1.0 / math.sqrt(float(size_per_head)))
-        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)       # doc中的padding元素不应该被attend, [bs, 130, 130]
+        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc, FLAGS.max_seq_length_query)    # doc中的padding元素不应该被attend, [bs, 130, 130]
         query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1], axis=[1])  #to [bs, 1, seq_len=128, seq_len=128]
         query_doc_att_matrix_mask_adder = (1.0 - tf.cast(query_doc_att_matrix_mask, tf.float32)) * -10000.0
         query_doc_att_scores = query_doc_qk + query_doc_att_matrix_mask_adder
@@ -1355,7 +1412,7 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
         doc_query_qk = tf.matmul(sbert_doc_qw[:, :, 1:-1, :], sbert_query_kw[:, :, 1:-1, :], transpose_b=True)  #[bs, num_heads, 128, 128]
         doc_query_qk = tf.multiply(doc_query_qk,
                                 1.0 / math.sqrt(float(size_per_head)))
-        doc_query_att_matrix_mask = create_att_mask(input_mask_sbert_query)
+        doc_query_att_matrix_mask = create_att_mask(input_mask_sbert_query, FLAGS.max_seq_length_doc)
         doc_query_att_matrix_mask = tf.expand_dims(doc_query_att_matrix_mask[:, 1:-1, 1:-1], axis=[1])  #to [bs, 1, seq_len=128, seq_len=128]
         doc_query_att_matrix_mask_adder = (1.0 - tf.cast(doc_query_att_matrix_mask, tf.float32)) * -10000.0
         doc_query_att_scores = doc_query_qk + doc_query_att_matrix_mask_adder
@@ -1611,7 +1668,8 @@ def main(_):
     processors = {
         "lcqmc": LcqmcProcessor,
         "mnli": MnliProcessor,
-        "qqp": QqpProcessor
+        "qqp": QqpProcessor,
+        "boolq": BoolqProcessor
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
@@ -1620,11 +1678,11 @@ def main(_):
 
     bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
-    if FLAGS.max_seq_length_bert > bert_config.max_position_embeddings:
-        raise ValueError(
-            "Cannot use sequence length %d because the BERT model "
-            "was only trained up to sequence length %d" %
-            (FLAGS.max_seq_length, bert_config.max_position_embeddings))
+    # if FLAGS.max_seq_length_bert > bert_config.max_position_embeddings:
+    #     raise ValueError(
+    #         "Cannot use sequence length %d because the BERT model "
+    #         "was only trained up to sequence length %d" %
+    #         (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
@@ -1696,7 +1754,7 @@ def main(_):
             print("train file exists")
         else:
             file_based_convert_examples_to_features(
-                train_examples, label_list, FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                train_examples, label_list, FLAGS.max_seq_length_query, FLAGS.max_seq_length_doc,
                 tokenizer, train_file, is_training=True)
         tf.logging.info("***** Running training *****")
         tf.logging.info("  Num examples = %d", len(train_examples))
@@ -1704,8 +1762,8 @@ def main(_):
         tf.logging.info("  Num steps = %d", num_train_steps)
         train_input_fn = file_based_input_fn_builder(
             input_file=train_file,
-            seq_length_bert=FLAGS.max_seq_length_bert,
-            seq_length_sbert=FLAGS.max_seq_length_sbert,
+            seq_length_query=FLAGS.max_seq_length_query,
+            seq_length_doc=FLAGS.max_seq_length_doc,
             is_training=True,
             drop_remainder=True)
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
@@ -1716,7 +1774,7 @@ def main(_):
 
         if not tf.gfile.Exists(eval_file):
             file_based_convert_examples_to_features(
-                eval_examples, label_list, FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                eval_examples, label_list, FLAGS.max_seq_length_query, FLAGS.max_seq_length_doc,
                 tokenizer, eval_file)
         else:
             print("eval file exists")
@@ -1737,8 +1795,8 @@ def main(_):
         eval_drop_remainder = True if FLAGS.use_tpu else False
         eval_input_fn = file_based_input_fn_builder(
             input_file=eval_file,
-            seq_length_bert=FLAGS.max_seq_length_bert,
-            seq_length_sbert=FLAGS.max_seq_length_sbert,
+            seq_length_query=FLAGS.max_seq_length_query,
+            seq_length_doc=FLAGS.max_seq_length_doc,
             is_training=False,
             drop_remainder=eval_drop_remainder)
 
@@ -1788,7 +1846,7 @@ def main(_):
 
         if not tf.gfile.Exists(predict_file):
             file_based_convert_examples_to_features(predict_examples, label_list,
-                                                    FLAGS.max_seq_length_bert, FLAGS.max_seq_length_sbert,
+                                                    FLAGS.max_seq_length_query, FLAGS.max_seq_length_doc,
                                                     tokenizer,
                                                     predict_file)
         else:
@@ -1806,8 +1864,8 @@ def main(_):
         predict_drop_remainder = True if FLAGS.use_tpu else False
         predict_input_fn = file_based_input_fn_builder(
             input_file=predict_file,
-            seq_length_bert=FLAGS.max_seq_length_bert,
-            seq_length_sbert=FLAGS.max_seq_length_sbert,
+            seq_length_query=FLAGS.max_seq_length_query,
+            seq_length_doc=FLAGS.max_seq_length_doc,
             is_training=False,
             drop_remainder=predict_drop_remainder)
 
@@ -1845,8 +1903,8 @@ if __name__ == "__main__":
     flags.mark_flag_as_required("kd_weight_logit")
     flags.mark_flag_as_required("use_kd_logit_mse")
     flags.mark_flag_as_required("use_kd_logit_kl")
-    flags.mark_flag_as_required("max_seq_length_bert")
-    flags.mark_flag_as_required("max_seq_length_sbert")
+    # flags.mark_flag_as_required("max_seq_length_bert")
+    # flags.mark_flag_as_required("max_seq_length_sbert")
     flags.mark_flag_as_required("pooling_strategy")
     flags.mark_flag_as_required("init_checkpoint_teacher")
     flags.mark_flag_as_required("init_checkpoint_student")
