@@ -7,7 +7,7 @@ export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/boolq/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/qqp/s_bert_distll_att_400/
-python _--sbert_distill.py \
+python _--sbert_distill_boolq.py \
   --task_name=boolq \
   --pooling_strategy=mean \
   --do_train=true \
