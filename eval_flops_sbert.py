@@ -726,9 +726,6 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         total_loss = regular_loss
         # total_loss = rele_loss
         # total_loss = 0.1*ner_loss + rele_loss
-        flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
-        tf.logging.info(
-            'GFLOPs: {}; '.format(flops.total_float_ops / 1000000000.0))
 
         tvars = tf.trainable_variables()
 
@@ -964,6 +961,9 @@ def main(_):
                 result = estimator.evaluate(input_fn=eval_input_fn,
                                             # steps=eval_steps)
                                             checkpoint_path=filename)
+                flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
+                tf.logging.info(
+                    'GFLOPs___: {}; '.format(flops.total_float_ops / 1000000000.0))
                 cur_acc = result["eval_accuracy"]
                 if cur_acc > best_metric:
                     best_metric = cur_acc

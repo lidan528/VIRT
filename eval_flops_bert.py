@@ -928,6 +928,9 @@ def main(_):
         result = estimator.evaluate(input_fn=eval_input_fn,
                                     # steps=eval_steps)
                                     checkpoint_path=filename)
+        flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
+        tf.logging.info(
+            'GFLOPs___: {}; '.format(flops.total_float_ops / 1000000000.0))
         cur_acc = result["eval_accuracy"]
         if cur_acc > best_metric:
           best_metric = cur_acc
