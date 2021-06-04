@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_base_pad_sep_realpool/
-python eval_flops.py \
+python eval_flops_sbert.py \
   --task_name=mnli \
   --pooling_strategy=mean \
   --do_train=false \
