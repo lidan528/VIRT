@@ -27,6 +27,8 @@ import optimization
 import tokenization
 import tensorflow as tf
 import json
+from tensorflow.python.framework import graph_util
+
 
 flags = tf.flags
 
@@ -631,9 +633,6 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         bert_config, is_training, input_ids, input_mask, segment_ids, label_ids,
         num_labels, use_one_hot_embeddings)
 
-    flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
-    tf.logging.info(
-        'GFLOPs: {}; '.format(flops.total_float_ops / 1000000000.0))
 
     tvars = tf.trainable_variables()
     initialized_variable_names = {}
@@ -684,6 +683,9 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
       eval_metrics = (metric_fn,
                       [per_example_loss, label_ids, logits, is_real_example])
+      flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
+      tf.logging.info(
+          'GFLOPs: {}; '.format(flops.total_float_ops / 1000000000.0))
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
