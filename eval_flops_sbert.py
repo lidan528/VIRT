@@ -142,12 +142,12 @@ flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
 flags.DEFINE_integer(
-    "max_query_length", 64,
+    "max_seq_length_query", 64,
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
 
 flags.DEFINE_integer(
-    "max_doc_length", 317,    # 384-64-3 in bert
+    "max_seq_length_doc", 317,    # 384-64-3 in bert
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
 
