@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=0
 #export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/bert_base_bipartition_mean_pool
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_contrast_teacher_0.2/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_contrast_self_0.3/
 python sbert_distill.py \
   --task_name=mnli \
   --pooling_strategy=mean \
@@ -20,7 +20,7 @@ python sbert_distill.py \
   --init_checkpoint_student=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length_bert=259 \
   --max_seq_length_sbert=130 \
-  --train_batch_size=32 \
+  --train_batch_size=28 \
   --learning_rate=5e-5 \
   --test_flie_name=None \
   --num_train_epochs=6 \
@@ -32,8 +32,8 @@ python sbert_distill.py \
   --use_kd_att=false \
   --kd_weight_att=0 \
   --use_layer_distill=false \
-  --layer_distill_mode=map_mean \
+  --layer_distill_mode=direct_mean \
   --kd_weight_layer=0 \
-  --use_contrast_teacher_separately=true \
-  --weight_contrast=0.2
+  --use_contrast_self=true \
+  --weight_contrast=0.3
 

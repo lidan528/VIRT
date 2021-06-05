@@ -1552,7 +1552,7 @@ def contrastive_loss_self(teacher_model, query_model, doc_model,
         loss += cos_loss_self(pooled_query_layer, pooled_doc_layer, truth_labels)
         cnt += 1
 
-    return loss / cnt
+    return -1 * loss / cnt
 
 
 def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
@@ -1583,7 +1583,7 @@ def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
         loss_doc = cos_sim_loss_for_contrast(teacher_doc, pooled_doc_layer)
         loss += (loss_query + loss_doc) / 2.0
         cnt += 1
-    return loss / cnt
+    return -1 * loss / cnt
 
 
 def kl(p, q):
