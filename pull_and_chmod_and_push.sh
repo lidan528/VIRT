@@ -1,3 +1,4 @@
+#!/bin/bash -v
 git pull origin feature/dev:master
 chmod +x $0
 git add $0
