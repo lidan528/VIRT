@@ -965,7 +965,7 @@ def metric_flops(bert_config):
     label_list = processor.get_labels() if task_name in processors else [0]
 
     if task_name == 'squad':
-        first_m = 16
+        first_m = 360
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                         name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
