@@ -975,13 +975,14 @@ def metric_flops(bert_config):
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph,
                                           len(label_list), first_m=first_m)
     elif task_name == 'boolq':
+        first_m = 64
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                         name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                           name='input/input_masks')
-        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32,
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, first_m, bert_config.hidden_size], dtype=tf.float32,
                                           name='input/cached_emd_b')
-        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
+        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), first_m=first_m)
 
     else:
         first_m = 360
