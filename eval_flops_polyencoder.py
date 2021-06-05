@@ -919,7 +919,7 @@ def create_model_metric_squad(bert_config, input_ids_ph, input_masks_ph, cached_
     final_vecs = tf.squeeze(final_vecs, axis=[1])
 
     pooled_output_layer_query = tf.expand_dims(final_vecs, axis=1)  # [bs, 1, emb_dim]
-    pooled_output_layer_query = tf.tile(pooled_output_layer_query, [1, FLAGS.max_seq_length_doc, 1])
+    pooled_output_layer_query = tf.tile(pooled_output_layer_query, [1, first_m, 1])
     sub_embedding = tf.abs(pooled_output_layer_query - cached_text_embed)
     max_embedding = tf.square(tf.reduce_max([pooled_output_layer_query, cached_text_embed], axis=0))
     regular_embedding = tf.concat([pooled_output_layer_query, cached_text_embed, sub_embedding, max_embedding], -1)
