@@ -856,9 +856,9 @@ def metric_flops(bert_config):
     }
 
     task_name = FLAGS.task_name.lower()
-    processor = processors[task_name]()
+    processor = processors[task_name]() if task_name in processors else None
     metric_func = metric_funcs[task_name]
-    label_list = processor.get_labels()
+    label_list = processor.get_labels() if task_name in processors else [0]
 
     input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
     input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
