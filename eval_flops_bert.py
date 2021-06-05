@@ -822,8 +822,8 @@ def metric_flops(bert_config):
     processor = processors[task_name]()
     label_list = processor.get_labels()
 
-    input_ids_ph = tf.placeholder(shape=[FLAGS.batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
-    input_masks_ph = tf.placeholder(shape=[FLAGS.batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
+    input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
+    input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
     result = create_model_metric(bert_config, input_ids_ph, input_masks_ph, len(label_list))
 
     with tf.Session() as sess:
