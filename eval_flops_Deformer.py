@@ -919,7 +919,7 @@ def metric_flops(bert_config):
         cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size],
                                           dtype=tf.float32, name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph,
-                                          len(label_list), sep_layers=9)
+                                          len(label_list), sep_layers=11)
 
     else:
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
