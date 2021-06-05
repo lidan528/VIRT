@@ -7,7 +7,7 @@ export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ 
 #export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_base_pad_sep_realpool/
 python eval_flops_polyencoder.py \
-  --task_name=squad \
+  --task_name=boolq \
   --pooling_strategy=mean \
   --do_train=false \
   --do_eval=true \
