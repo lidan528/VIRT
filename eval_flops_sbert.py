@@ -811,18 +811,68 @@ def serving_input_receiver_fn(max_seq_length):
     return tf.estimator.export.build_raw_serving_input_receiver_fn(feature_spec)
 
 
-def main(_):
-    tf.logging.set_verbosity(tf.logging.INFO)
+def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_emb_b,  num_labels):
+    """
+    只有a需要处理输入, b端直接用已有的缓存
+    """
+    model = modeling.BertModel(
+        config=bert_config,
+        is_training=False,
+        input_ids=input_ids_a_ph,
+        use_one_hot_embeddings=FLAGS.use_tpu)
+    if FLAGS.pooling_strategy == "cls":
+        tf.logging.info("use cls embedding")
+        output_layer_a = model.get_pooled_output()
 
+    elif FLAGS.pooling_strategy == "mean":
+        tf.logging.info("use mean embedding")
+
+        output_layer = model.get_sequence_output()
+
+        mask = tf.cast(tf.expand_dims(input_masks_a_ph, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+        masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
+        actual_token_nums = tf.reduce_sum(input_masks_a_ph, axis=-1)  # [bs_size]
+        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
+        output_layer_a = sum_masked_output_layer / actual_token_nums
+
+
+    sub_embedding = tf.abs(output_layer_a - cached_emb_b)
+    max_embedding = tf.square(tf.reduce_max([output_layer_a, cached_emb_b], axis=0))
+    regular_embedding = tf.concat([output_layer_a, cached_emb_b, sub_embedding, max_embedding], -1)
+    logits = tf.layers.dense(regular_embedding, units=num_labels)
+    probabilities = tf.nn.softmax(logits, axis=-1)
+
+    return probabilities
+
+
+def metric_flops(bert_config):
+    run_metadata = tf.RunMetadata()
     processors = {
-        "lcqmc": LcqmcProcessor,
         "mnli": MnliProcessor,
         "qqp": QqpProcessor
     }
+    task_name = FLAGS.task_name.lower()
+    processor = processors[task_name]()
+    label_list = processor.get_labels()
 
-    if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
-        raise ValueError(
-            "At least one of `do_train`, `do_eval` or `do_predict' must be True.")
+    input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
+    input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
+    cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
+    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        opt_builder = tf.profiler.ProfileOptionBuilder
+        prof_options = opt_builder.float_operation()
+        prof_options['hide_name_regexes'] = ['.*/Initializer/.*']
+        tfprof_node = tf.profiler.profile(sess.graph, options=prof_options)
+        tf.logging.info('GFLOPs: {};    '.format(tfprof_node.total_float_ops / 1000000000.0))
+
+
+
+def main(_):
+    tf.logging.set_verbosity(tf.logging.INFO)
 
     bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
@@ -832,201 +882,7 @@ def main(_):
             "was only trained up to sequence length %d" %
             (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
-    tf.gfile.MakeDirs(FLAGS.output_dir)
-
-    task_name = FLAGS.task_name.lower()
-
-    if task_name not in processors:
-        raise ValueError("Task not found: %s" % (task_name))
-
-    processor = processors[task_name]()
-
-    label_list = processor.get_labels()
-
-    tokenizer = tokenization.FullTokenizer(
-        vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
-
-    tpu_cluster_resolver = None
-    if FLAGS.use_tpu and FLAGS.tpu_name:
-        tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-
-    is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-    run_config = tf.contrib.tpu.RunConfig(
-        cluster=tpu_cluster_resolver,
-        master=FLAGS.master,
-        model_dir=FLAGS.output_dir,
-        save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-        tpu_config=tf.contrib.tpu.TPUConfig(
-            iterations_per_loop=FLAGS.iterations_per_loop,
-            num_shards=FLAGS.num_tpu_cores,
-            per_host_input_for_training=is_per_host))
-
-    train_examples = None
-    num_train_steps = None
-    num_warmup_steps = None
-    if FLAGS.do_train:
-        train_examples = processor.get_train_examples(FLAGS.data_dir)
-        num_train_steps = int(
-            len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
-        num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
-
-    model_fn = model_fn_builder(
-        bert_config=bert_config,
-        num_rele_label=len(label_list),
-        init_checkpoint=FLAGS.init_checkpoint,
-        learning_rate=FLAGS.learning_rate,
-        num_train_steps=num_train_steps,
-        num_warmup_steps=num_warmup_steps,
-        use_tpu=FLAGS.use_tpu,
-        use_one_hot_embeddings=FLAGS.use_tpu)
-
-    # # If TPU is not available, this will fall back to normal Estimator on CPU
-    # # or GPU.
-    estimator = tf.contrib.tpu.TPUEstimator(
-        use_tpu=FLAGS.use_tpu,
-        model_fn=model_fn,
-        config=run_config,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        predict_batch_size=FLAGS.predict_batch_size)
-
-    # def file_based_convert_examples_to_features(
-    #         examples, ner_label_map, label_list, max_seq_length, tokenizer, output_file, is_training=False):
-
-    if FLAGS.do_train:
-        train_file = os.path.join(FLAGS.output_dir, task_name + "train.tf_record")
-        if tf.gfile.Exists(train_file):
-            print("train file exists")
-        else:
-            file_based_convert_examples_to_features(
-                train_examples, label_list, FLAGS.max_seq_length, tokenizer, train_file, is_training=True)
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Num examples = %d", len(train_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-        tf.logging.info("  Num steps = %d", num_train_steps)
-        train_input_fn = file_based_input_fn_builder(
-            input_file=train_file,
-            seq_length=FLAGS.max_seq_length,
-            is_training=True,
-            drop_remainder=True)
-        estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-
-    if FLAGS.do_eval:
-        eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-        eval_file = os.path.join(FLAGS.output_dir, task_name + "eval.tf_record")
-
-        if not tf.gfile.Exists(eval_file):
-            file_based_convert_examples_to_features(
-                eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
-        else:
-            print("eval file exists")
-
-        tf.logging.info("***** Running evaluation *****")
-        tf.logging.info("  Num examples = %d", len(eval_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
-
-        # This tells the estimator to run through the entire set.
-        eval_steps = None
-        # However, if running eval on the TPU, you will need to specify the
-        # number of steps.
-        if FLAGS.use_tpu:
-            # Eval will be slightly WRONG on the TPU because it will truncate
-            # the last batch.
-            eval_steps = int(len(eval_examples) / FLAGS.eval_batch_size)
-
-        eval_drop_remainder = True if FLAGS.use_tpu else False
-        eval_input_fn = file_based_input_fn_builder(
-            input_file=eval_file,
-            seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=eval_drop_remainder)
-
-        steps_and_files = []
-        filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
-        for file in filenames:
-            if file.endswith(".index"):
-                ckpt_name = file[:-6]
-                cur_filename = os.path.join(FLAGS.output_dir, ckpt_name)
-                global_step = int(cur_filename.split("-")[-1])
-                steps_and_files.append((global_step, cur_filename))
-                tf.logging.info("add {} to eval list...".format(cur_filename))
-
-        steps_and_files = sorted(steps_and_files, key=lambda x: x[0])[0:1]
-
-        best_metric, best_ckpt = 0, ''
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.gfile.GFile(output_eval_file, "w") as writer:
-            for global_step, filename in steps_and_files:
-                result = estimator.evaluate(input_fn=eval_input_fn,
-                                            # steps=eval_steps)
-                                            checkpoint_path=filename)
-                flops = tf.profiler.profile(options=tf.profiler.ProfileOptionBuilder.float_operation())
-                tf.logging.info(
-                    'GFLOPs___: {}; '.format(flops.total_float_ops / 1000000000.0))
-                cur_acc = result["eval_accuracy"]
-                if cur_acc > best_metric:
-                    best_metric = cur_acc
-                    best_ckpt = filename
-                tf.logging.info("***** Eval results of step-{} *****".format(global_step))
-                writer.write("***** Eval results of step-{} *****".format(global_step))
-                for key in sorted(result.keys()):
-                    if key.startswith("eval"):
-                        tf.logging.info("  %s = %s", key, str(result[key]))
-                        writer.write("%s = %s\n" % (key, str(result[key])))
-
-        tf.logging.info("*****Best eval results: {} from {}  *****".format(best_metric, best_ckpt))
-
-    if FLAGS.do_predict:
-        predict_examples = processor.get_test_examples(FLAGS.data_dir, FLAGS.test_flie_name)
-        predict_file = os.path.join(FLAGS.output_dir, task_name + "predict.tf_record")
-
-        if not tf.gfile.Exists(predict_file):
-            file_based_convert_examples_to_features(predict_examples, label_list, FLAGS.max_seq_length, tokenizer,
-                                                    predict_file)
-        else:
-            print("predict file Exists")
-
-        tf.logging.info("***** Running prediction*****")
-        tf.logging.info("  Num examples = %d", len(predict_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
-
-        if FLAGS.use_tpu:
-            # Warning: According to tpu_estimator.py Prediction on TPU is an
-            # experimental feature and hence not supported here
-            raise ValueError("Prediction in TPU not supported")
-
-        predict_drop_remainder = True if FLAGS.use_tpu else False
-        predict_input_fn = file_based_input_fn_builder(
-            input_file=predict_file,
-            seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=predict_drop_remainder)
-
-        eval_steps = None
-        # test_result = estimator.evaluate(input_fn=predict_input_fn, steps=eval_steps)
-        # output_test_file = os.path.join(FLAGS.output_dir, "test_results.txt")
-        # with tf.gfile.GFile(output_test_file, "w") as writer:
-        # tf.logging.info("***** test results *****")
-        # for key in sorted(test_result.keys()):
-        # tf.logging.info("  %s = %s", key, str(test_result[key]))
-        # writer.write("%s = %s\n" % (key, str(test_result[key])))
-
-        result = estimator.predict(input_fn=predict_input_fn)
-
-        output_predict_file = os.path.join(FLAGS.output_dir, "predict_results.tsv")
-        with tf.gfile.GFile(output_predict_file, "w") as writer:
-            tf.logging.info("***** Predict results *****")
-            for prediction in result:
-                # output_line = str(prediction[1]) + "\n"
-                output_line = ",".join(str(class_probability) for class_probability in prediction) + "\n"
-                writer.write(output_line)
-
-    if FLAGS.do_save:
-        estimator._export_to_tpu = False
-        estimator.export_savedmodel(FLAGS.output_dir,
-                                    serving_input_receiver_fn=serving_input_receiver_fn(FLAGS.max_seq_length))
-        tf.logging.info("******* Done for exporting pb file***********")
+    metric_flops(bert_config)
 
 
 if __name__ == "__main__":

@@ -773,7 +773,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
   return features
 
 
-def create_model_metric(bert_config, input_ids_ph, input_masks_ph, num_labels):
+def create_model_metric_mnli(bert_config, input_ids_ph, input_masks_ph, num_labels):
     model = modeling.BertModel(
         config=bert_config,
         is_training=False,
@@ -811,6 +811,8 @@ def create_model_metric(bert_config, input_ids_ph, input_masks_ph, num_labels):
         return probabilities
 
 
+def create_model_metric_squad(bert_config, input_ids_ph, )
+
 
 def metric_flops(bert_config):
     run_metadata = tf.RunMetadata()
@@ -824,7 +826,7 @@ def metric_flops(bert_config):
 
     input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
     input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
-    result = create_model_metric(bert_config, input_ids_ph, input_masks_ph, len(label_list))
+    result = create_model_metric_mnli(bert_config, input_ids_ph, input_masks_ph, len(label_list))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())

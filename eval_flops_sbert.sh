@@ -17,7 +17,7 @@ python eval_flops_sbert.py \
   --bert_config_file=$BERT_MODEL_DIR/bert_config.json \
   --init_checkpoint=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length=130 \
-  --train_batch_size=64 \
+  --train_batch_size=1 \
   --learning_rate=5e-5 \
   --test_flie_name=None \
   --num_train_epochs=5.0 \
