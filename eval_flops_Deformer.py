@@ -856,7 +856,7 @@ def metric_flops(bert_config):
     input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
     input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
     cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
-    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), sep_layers=9)
+    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), sep_layers=11)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
