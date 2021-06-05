@@ -141,6 +141,16 @@ flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
 
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
+flags.DEFINE_integer(
+    "max_seq_length_query", 64,
+    "The maximum number of tokens for the question. Questions longer than "
+    "this will be truncated to this length.")
+
+flags.DEFINE_integer(
+    "max_seq_length_doc", 317,    # 384-64-3 in bert
+    "The maximum number of tokens for the question. Questions longer than "
+    "this will be truncated to this length.")
+
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
@@ -843,20 +853,79 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cach
         return probabilities
 
 
+def create_model_metric_squad(bert_config, input_ids_a_ph, input_masks_a_ph, cached_emb_b,  num_labels, sep_layers):
+    """
+    只有a需要处理输入, b端直接用已有的缓存, 注意在Deformer中，cached_emb_b是token粒度的，需要关注seq_len维度
+    """
+    bert_config.num_hidden_layers = sep_layers
+    top_transformer_layers = 12 - sep_layers
+    model = modeling.BertModel(
+        config=bert_config,
+        is_training=False,
+        input_ids=input_ids_a_ph,
+        use_one_hot_embeddings=FLAGS.use_tpu)
+
+    output_layer_a = model.get_sequence_output()
+    concated_emb_ab = tf.concat([output_layer_a, cached_emb_b], axis=1)
+    output_layer = modeling.transformer_model(input_tensor=concated_emb_ab, num_hidden_layers=top_transformer_layers, do_return_all_layers=True)[0][0]
+
+    final_hidden_shape = modeling.get_shape_list(output_layer, expected_rank=3)
+    batch_size = final_hidden_shape[0]
+    seq_length = final_hidden_shape[1]
+    hidden_size = final_hidden_shape[2]
+
+    output_weights = tf.get_variable(
+        "output_weights", [2, hidden_size],
+        initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+    output_bias = tf.get_variable(
+        "output_bias", [2], initializer=tf.zeros_initializer())
+
+    final_hidden_matrix = tf.reshape(output_layer,
+                                     [batch_size * seq_length, hidden_size])
+    logits = tf.matmul(final_hidden_matrix, output_weights, transpose_b=True)
+    logits = tf.nn.bias_add(logits, output_bias)
+
+    logits = tf.reshape(logits, [batch_size, seq_length, 2])
+    logits = tf.transpose(logits, [2, 0, 1])  # [2, bs, seq_len]      # each position word_embedding mapped to a value
+
+    unstacked_logits = tf.unstack(logits, axis=0)
+    (start_logits, end_logits) = (unstacked_logits[0], unstacked_logits[1])
+    return (start_logits, end_logits)  # [bs, seq_len]
+
+
+
 def metric_flops(bert_config):
     run_metadata = tf.RunMetadata()
     processors = {
         "mnli": MnliProcessor,
         "qqp": QqpProcessor
     }
-    task_name = FLAGS.task_name.lower()
-    processor = processors[task_name]()
-    label_list = processor.get_labels()
+    metric_funcs = {
+        "mnli": create_model_metric_mnli,
+        "squad": create_model_metric_squad
+    }
 
-    input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
-    input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
-    cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
-    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), sep_layers=11)
+    task_name = FLAGS.task_name.lower()
+    processor = processors[task_name]() if task_name in processors else None
+    metric_func = metric_funcs[task_name]
+    label_list = processor.get_labels() if task_name in processors else [0]
+
+    if task_name == 'squad':
+        input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
+                                        name='input/input_ids')
+        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
+                                          name='input/input_masks')
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size],
+                                          dtype=tf.float32, name='input/cached_emd_b')
+        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph,
+                                          len(label_list), sep_layers=9)
+
+    else:
+        input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
+        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
+        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), sep_layers=11)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
