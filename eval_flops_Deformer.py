@@ -811,10 +811,12 @@ def serving_input_receiver_fn(max_seq_length):
     return tf.estimator.export.build_raw_serving_input_receiver_fn(feature_spec)
 
 
-def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_emb_b,  num_labels):
+def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_emb_b,  num_labels, sep_layers):
     """
     只有a需要处理输入, b端直接用已有的缓存, 注意在Deformer中，cached_emb_b是token粒度的，需要关注seq_len维度
     """
+    bert_config.num_hidden_layers = sep_layers
+    top_transformer_layers = 12 - sep_layers
     model = modeling.BertModel(
         config=bert_config,
         is_training=False,
@@ -823,7 +825,7 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cach
 
     output_layer_a = model.get_sequence_output()
     concated_emb_ab = tf.concat([output_layer_a, cached_emb_b], axis=1)
-    output_layer = modeling.transformer_model(input_tensor=concated_emb_ab, num_hidden_layers=1, do_return_all_layers=True)[0][0]
+    output_layer = modeling.transformer_model(input_tensor=concated_emb_ab, num_hidden_layers=top_transformer_layers, do_return_all_layers=True)[0][0]
     # [bs, seq_length, emb_dim]
 
     hidden_size = output_layer.shape[-1].value
@@ -854,7 +856,7 @@ def metric_flops(bert_config):
     input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
     input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
     cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
-    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
+    result = create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list), sep_layers=9)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
