@@ -873,10 +873,25 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cach
     return probabilities
 
 
-def create_model_metric_squad(bert_config, input_ids_ph, input_masks_ph, cached_text_embed, num_labels):
+def create_model_metric_squad(bert_config, input_ids_ph, input_masks_ph, cached_text_embed, num_labels, first_m):
     """
     问题需要运行，所有答案的token都为cached的Embedding
     """
+    def dot_attention(q, k, v, v_mask=None, dropout=None):
+        # v_mask [B, T]
+        attention_scores = tf.matmul(q, k, transpose_b=True)
+        # attention_scores [B, S, T]
+        attention_scores = tf.multiply(attention_scores,
+                                       1.0 / math.sqrt(float(bert_config.hidden_size)))
+        if v_mask is not None:
+            v_mask = tf.expand_dims(v_mask, axis=[1])
+            adder = (1.0 - tf.cast(v_mask, tf.float32)) * -10000.0
+            attention_scores += adder
+
+        attention_probs = tf.nn.softmax(attention_scores)  # [B, S, T]
+        output = tf.matmul(attention_probs, v)
+        return output
+
     model = modeling.BertModel(
         config=bert_config,
         is_training=False,
@@ -898,7 +913,12 @@ def create_model_metric_squad(bert_config, input_ids_ph, input_masks_ph, cached_
         actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
         output_layer_a = sum_masked_output_layer / actual_token_nums
 
-    pooled_output_layer_query = tf.expand_dims(output_layer_a, axis=1)  # [bs, 1, emb_dim]
+    query_embedding = tf.expand_dims(output_layer_a, axis=[1])
+    poly_mask = tf.constant(value=np.ones((FLAGS.train_batch_size, first_m)))
+    final_vecs = dot_attention(query_embedding, cached_text_embed[:, 0:first_m, :], cached_text_embed[:, 0:first_m, :], v_mask=poly_mask)
+    final_vecs = tf.squeeze(final_vecs, axis=[1])
+
+    pooled_output_layer_query = tf.expand_dims(final_vecs, axis=1)  # [bs, 1, emb_dim]
     pooled_output_layer_query = tf.tile(pooled_output_layer_query, [1, FLAGS.max_seq_length_doc, 1])
     sub_embedding = tf.abs(pooled_output_layer_query - cached_text_embed)
     max_embedding = tf.square(tf.reduce_max([pooled_output_layer_query, cached_text_embed], axis=0))
@@ -945,6 +965,7 @@ def metric_flops(bert_config):
     label_list = processor.get_labels() if task_name in processors else [0]
 
     if task_name == 'squad':
+        first_m = 16
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                         name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
@@ -952,7 +973,7 @@ def metric_flops(bert_config):
         cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size], dtype=tf.float32,
                                           name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph,
-                                          len(label_list))
+                                          len(label_list), first_m=first_m)
     elif task_name == 'boolq':
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                         name='input/input_ids')
