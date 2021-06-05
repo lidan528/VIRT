@@ -12,7 +12,7 @@ python eval_flops_bert.py \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
   --init_checkpoint=$BERT_BASE_DIR/bert_model.ckpt \
   --max_seq_length=259 \
-  --train_batch_size=32 \
+  --train_batch_size=1 \
   --learning_rate=5e-5 \
   --num_train_epochs=6.0 \
   --output_dir=$OUTPUT \
