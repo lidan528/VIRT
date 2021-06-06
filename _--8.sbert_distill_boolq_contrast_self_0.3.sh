@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/bert_base_bipartition_mean_pool
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/boolq/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/s_bert_distll_contrast_self_0.3/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/s_bert_distll_contrast_self_0.05/
 python _--sbert_distill_boolq.py \
   --task_name=boolq \
   --pooling_strategy=mean \
@@ -32,5 +32,5 @@ python _--sbert_distill_boolq.py \
   --use_kd_att=false \
   --kd_weight_att=0 \
   --use_contrast_self=true \
-  --weight_contrast=0.3
+  --weight_contrast=0.05
 
