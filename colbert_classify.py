@@ -754,7 +754,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         doc_mask = tf.expand_dims(input_mask_b, axis=-1)
         doc_mask = tf.expand_dims(doc_mask, axis=-1)
         doc_mask = tf.tile(doc_mask, tf.constant([1, 1, num_rele_label, FLAGS.colbert_dim]))
-        doc_embedding = tf.multiply(tf.cas(doc_mask, dtype=tf.float32), doc_embedding)
+        doc_embedding = tf.multiply(tf.cast(doc_mask, dtype=tf.float32), doc_embedding)
 
         logits = max_attention_score(query_embedding, doc_embedding)
 
