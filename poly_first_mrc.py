@@ -1611,32 +1611,39 @@ def main(_):
     if FLAGS.do_train:
         train_file_tfr = os.path.join(FLAGS.output_dir, "train.tf_record")
 
-        train_writer = FeatureWriter(
-            filename=train_file_tfr,
-            is_training=True)
-        convert_examples_to_features(
-            examples=train_examples,
-            tokenizer=tokenizer,
-            max_seq_length=FLAGS.max_seq_length,
-            doc_stride=FLAGS.doc_stride,
-            max_query_length=FLAGS.max_query_length,
-            is_training=True,
-            output_fn=train_writer.process_feature)
-        train_writer.close()
+        if not os.path.exists(train_file_tfr):
+            train_writer = FeatureWriter(
+                filename=train_file_tfr,
+                is_training=True)
+            convert_examples_to_features(
+                examples=train_examples,
+                tokenizer=tokenizer,
+                max_seq_length=FLAGS.max_seq_length,
+                doc_stride=FLAGS.doc_stride,
+                max_query_length=FLAGS.max_query_length,
+                is_training=True,
+                output_fn=train_writer.process_feature)
+            train_writer.close()
+            tf.logging.info("***** Running training *****")
+            tf.logging.info("  Num orig examples = %d", len(train_examples))
+            tf.logging.info("  Num split examples = %d", train_writer.num_features)
+            tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
+            tf.logging.info("  Num steps = %d", num_train_steps)
+            del train_examples
 
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Num orig examples = %d", len(train_examples))
-        tf.logging.info("  Num split examples = %d", train_writer.num_features)
-        tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-        tf.logging.info("  Num steps = %d", num_train_steps)
-        del train_examples
-
-        train_input_fn = input_fn_builder(
-            input_file=train_writer.filename,
-            seq_length_query=FLAGS.max_query_length + 2,  # [CLS], query, <PAD>, [SEP]
-            seq_length_doc=FLAGS.max_doc_length + 2,  # [CLS], doc, <PAD>, [SEP]
-            is_training=True,
-            drop_remainder=True)
+            train_input_fn = input_fn_builder(
+                input_file=train_writer.filename,
+                seq_length_query=FLAGS.max_query_length + 2,  # [CLS], query, <PAD>, [SEP]
+                seq_length_doc=FLAGS.max_doc_length + 2,  # [CLS], doc, <PAD>, [SEP]
+                is_training=True,
+                drop_remainder=True)
+        else:
+            train_input_fn = input_fn_builder(
+                input_file=train_file_tfr,
+                seq_length_query=FLAGS.max_query_length + 2,  # [CLS], query, <PAD>, [SEP]
+                seq_length_doc=FLAGS.max_doc_length + 2,  # [CLS], doc, <PAD>, [SEP]
+                is_training=True,
+                drop_remainder=True)
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
     if FLAGS.do_eval:
