@@ -747,12 +747,12 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
 
         query_mask = tf.expand_dims(input_mask_a, axis=-1)
         query_mask = tf.expand_dims(query_mask, axis=-1)
-        query_mask = tf.tile(query_mask, tf.constant([B, S, num_rele_label, H]))
+        query_mask = tf.tile(query_mask, tf.constant([B, S, num_rele_label, FLAGS.colbert_dim]))
         query_embedding = tf.multiply(tf.cast(query_mask, dtype=tf.float32),
                             query_embedding)
         doc_mask = tf.expand_dims(input_mask_b, axis=-1)
         doc_mask = tf.expand_dims(doc_mask, axis=-1)
-        doc_mask = tf.tile(doc_mask, tf.constant([B, S, num_rele_label, H]))
+        doc_mask = tf.tile(doc_mask, tf.constant([B, S, num_rele_label, FLAGS.colbert_dim]))
         doc_embedding = tf.multiply(tf.cas(doc_mask, dtype=tf.float32),
                                     doc_embedding)
 
