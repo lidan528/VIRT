@@ -732,8 +732,8 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             attention_scores = tf.reduce_sum(tf.reduce_sum(attention_scores, axis=-1), axis=-1)
             return attention_scores
 
-        query_embedding = tf.layer.dense(query_embedding, units=FLAGS.colbert_dim)
-        doc_embedding = tf.layer.dense(doc_embedding, units=FLAGS.colbert_dim)
+        query_embedding = tf.layers.dense(query_embedding, units=FLAGS.colbert_dim)
+        doc_embedding = tf.layers.dense(doc_embedding, units=FLAGS.colbert_dim)
         B, S, H = modeling.get_shape_list(query_embedding)
         _, T, H = modeling.get_shape_list(doc_embedding)
 

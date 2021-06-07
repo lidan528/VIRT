@@ -20,7 +20,6 @@ python poly_first.py \
   --max_seq_length=130 \
   --train_batch_size=64 \
   --colbert_dim=$colbert_dim \
-  --poly_first_m=${poly_first_m} \
   --learning_rate=5e-5 \
   --test_flie_name=None \
   --num_train_epochs=5.0 \
