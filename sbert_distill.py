@@ -1483,7 +1483,9 @@ def cos_sim_loss_for_contrast(matrix_a, matrix_b):
     norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)
     cos_sim = tf.divide(dot_result, norm2_ab)  # batch_size * batch_size
     cos_sim = tf.nn.softmax(cos_sim, axis=1)
-    diag_sum = tf.reduce_sum(tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim))
+    diag_elem = tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim)
+    log_diag_elem = tf.log(diag_elem)
+    diag_sum = tf.reduce_sum(log_diag_elem)
     return diag_sum
 
 
@@ -1538,7 +1540,8 @@ def contrastive_loss_self(teacher_model, query_model, doc_model,
         diag_elem = tf.multiply(tf.eye(tf.shape(cos_sim)[0]), cos_sim)      #[bs, bs] only diag remained
         label_mask = tf.cast(tf.expand_dims(label_mask, axis=-1), dtype=tf.float32)     #[bs, 1]
         matched_diag_elem = tf.multiply(diag_elem, label_mask)
-        loss = tf.reduce_sum(matched_diag_elem)
+        log_matched_diag_elem = tf.log(matched_diag_elem)
+        loss = tf.reduce_sum(log_matched_diag_elem)
         return loss
 
     all_teacher_layers, all_query_layers, all_doc_layers = \
@@ -1552,7 +1555,9 @@ def contrastive_loss_self(teacher_model, query_model, doc_model,
         loss += cos_loss_self(pooled_query_layer, pooled_doc_layer, truth_labels)
         cnt += 1
 
-    return -1 * loss / cnt
+    loss = loss / cnt
+
+    return -1 * loss
 
 
 def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
