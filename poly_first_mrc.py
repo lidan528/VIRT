@@ -930,9 +930,8 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
 
         (start_logits, end_logits) = (unstacked_logits[0], unstacked_logits[1])
 
-
-        pooled_output_layer_query = pool_query_output(output_layer_query, input_mask_query, model_query)
-        start_logits, end_logits = get_logits(pooled_output_layer_query, output_layer_doc, output_shape_doc)
+        # pooled_output_layer_query = pool_query_output(output_layer_query, input_mask_query, model_query)
+        # start_logits, end_logits = get_logits(pooled_output_layer_query, output_layer_doc, output_shape_doc)
 
         tvars = tf.trainable_variables()
         initialized_variable_names = {}
