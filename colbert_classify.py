@@ -745,8 +745,10 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         query_embedding = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
         doc_embedding = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
 
-        query_embedding = tf.expand_dims(tf.expand_dims(input_mask_a, axis=-1), axis=-1) * query_embedding
-        doc_embedding = tf.expand_dims(tf.expand_dims(input_mask_b, axis=-1), axis=-1) * doc_embedding
+        query_embedding = tf.multiply(tf.cast(tf.expand_dims(tf.expand_dims(input_mask_a, axis=-1), axis=-1), dtype=tf.float32),
+                            query_embedding)
+        doc_embedding = tf.multiply(tf.cast(tf.expand_dims(tf.expand_dims(input_mask_b, axis=-1), axis=-1), dtype=tf.float32),
+                                    doc_embedding)
 
         logits = max_attention_score(query_embedding, doc_embedding)
 
