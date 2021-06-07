@@ -723,11 +723,13 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             # q [B, S, num_label, H], v [B, T, num_label, H]
             q = tf.transpose(q, perm=[0, 3, 1, 2])
             k = tf.transpose(k, perm=[0, 3, 1, 2])
+            print(modeling.get_shape_list(q))
             attention_scores = tf.matmul(q, k, transpose_b=True)
             # attention_scores [B, num_label, S, T]
             attention_scores = tf.multiply(attention_scores,
                                            1.0 / math.sqrt(float(bert_config.hidden_size)))
-            attention_scores = tf.reduce_sum(tf.reduce_sum(attention_scores, axis=-1), axis=-1)
+            attention_scores = tf.reduce_sum(tf.reduce_max(attention_scores, axis=-1), axis=-1)
+            print(modeling.get_shape_list(attention_scores))
             return attention_scores
 
         query_embedding = tf.layers.dense(query_embedding, units=FLAGS.colbert_dim)
