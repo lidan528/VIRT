@@ -35,5 +35,5 @@ python sbert_distill.py \
   --layer_distill_mode=direct_mean \
   --kd_weight_layer=0 \
   --use_contrast_self=true \
-  --weight_contrast=0.1
+  --weight_contrast=0.01
 
