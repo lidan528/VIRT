@@ -1,14 +1,14 @@
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=4
 #export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
 export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
-export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
+export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/qqp/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-COLBERT_DIM=128
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/colbert_${COLBERT_DIM}_base_pad_sep_realpool/
-python colbert_classify.py \
-  --task_name=mnli \
+poly_first_m=16
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/qqp/poly_${poly_first_m}_base_pad_sep_realpool/
+python poly_first.py \
+  --task_name=qqp \
   --pooling_strategy=mean \
   --do_train=true \
   --do_eval=true \
@@ -18,8 +18,8 @@ python colbert_classify.py \
   --bert_config_file=$BERT_MODEL_DIR/bert_config.json \
   --init_checkpoint=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length=130 \
-  --train_batch_size=64 \
-  --colbert_dim=$COLBERT_DIM \
+  --poly_first_m=${poly_first_m} \
+  --train_batch_size=32 \
   --learning_rate=5e-5 \
   --test_flie_name=None \
   --num_train_epochs=5.0 \

@@ -553,8 +553,6 @@ def file_based_convert_examples_to_features(
 
         features["label_ids"] = create_int_feature([feature.label_id])
 
-
-
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
         writer.write(tf_example.SerializeToString())
         count+=1
