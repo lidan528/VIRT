@@ -721,8 +721,8 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
 
         def max_attention_score(q, k):
             # q [B, S, num_label, H], v [B, T, num_label, H]
-            q = tf.transpose(q, perm=[0, 3, 1, 2])
-            k = tf.transpose(k, perm=[0, 3, 1, 2])
+            q = tf.transpose(q, perm=[0, 2, 1, 3])
+            k = tf.transpose(k, perm=[0, 2, 1, 3])
             print(modeling.get_shape_list(q))
             attention_scores = tf.matmul(q, k, transpose_b=True)
             # attention_scores [B, num_label, S, T]
