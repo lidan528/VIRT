@@ -891,10 +891,31 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
         doc_embedding = output_layer_doc
         query_embedding = output_layer_query
 
-        query_embedding = tf.layers.dense(query_embedding, units=2)
-        doc_embedding = tf.layers.dense(doc_embedding, units=2)
+        query_embedding = tf.layers.dense(query_embedding, units=FLAGS.colbert_dim)
+        doc_embedding = tf.layers.dense(doc_embedding, units=FLAGS.colbert_dim)
         B, S, H = modeling.get_shape_list(query_embedding)
         _, T, H = modeling.get_shape_list(doc_embedding)
+
+        transform_weights = tf.get_variable(
+            "output_weights", [2 * FLAGS.colbert_dim, FLAGS.colbert_dim],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        query_embedding = tf.reshape(tf.matmul(query_embedding, transform_weights, transpose_b=True), [B, S, 2, H])
+        doc_embedding = tf.reshape(tf.matmul(doc_embedding, transform_weights, transpose_b=True), [B, T, 2, H])
+
+        query_embedding, _ = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
+        doc_embedding, _ = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
+
+        query_mask = tf.expand_dims(input_mask_query, axis=-1)
+        query_mask = tf.expand_dims(query_mask, axis=-1)
+        query_mask = tf.tile(query_mask, tf.constant([1, 1, 2, FLAGS.colbert_dim]))
+        query_mask = tf.cast(query_mask, dtype=tf.float32)
+        query_embedding = tf.multiply(query_mask, query_embedding)
+
+        doc_mask = tf.expand_dims(input_mask_doc, axis=-1)
+        doc_mask = tf.expand_dims(doc_mask, axis=-1)
+        doc_mask = tf.tile(doc_mask, tf.constant([1, 1, 2, FLAGS.colbert_dim]))
+        doc_embedding = tf.multiply(tf.cast(doc_mask, dtype=tf.float32), doc_embedding)
 
         score = attention_score(query_embedding, doc_embedding)
         logits = tf.transpose(score, [1, 0, 2])  # [2, bs, seq_len]      # each position word_embedding mapped to a value
