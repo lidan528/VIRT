@@ -919,7 +919,7 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
             "output_bias", [2], initializer=tf.zeros_initializer())
 
         final_hidden_matrix = tf.reshape(regular_embedding,
-                                         [batch_size * seq_length_doc, hidden_size * 4])  # regular_embedding为四个向量拼接
+                                         [batch_size * seq_length_doc, hidden_size * 2])  # regular_embedding为四个向量拼接
         logits = tf.matmul(final_hidden_matrix, output_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
 
