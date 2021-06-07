@@ -140,7 +140,8 @@ flags.DEFINE_string("ner_label_file", None, "ner label files")
 
 flags.DEFINE_string("pooling_strategy", "cls", "Pooling Strategy")
 
-flags.DEFINE_integer("poly_first_m", 16, "number of poly embeddings")
+flags.DEFINE_integer("colbert_dim", 128, "reduction dimension of colbert")
+
 
 flags.DEFINE_bool("do_save", False, "Whether to save the checkpoint to pb")
 
@@ -705,7 +706,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             segment_ids_b = features["segment_ids_b"]
             label_ids = features["label_ids"]
             query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
-                                           pooling=True)
+                                           pooling=False)
             doc_embedding = create_model(bert_config, is_training, input_ids_b, input_mask_b, segment_ids_b, use_one_hot_embeddings, tf.AUTO_REUSE,
                                          pooling=False)
         else:
@@ -713,34 +714,44 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
             input_mask_a = features["input_mask_a"]
             segment_ids_a = features["segment_ids_a"]
             query_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
-                                           pooling=True)
+                                           pooling=False)
             doc_embedding = create_model(bert_config, is_training, input_ids_a, input_mask_a, segment_ids_a, use_one_hot_embeddings, tf.AUTO_REUSE,
                                          pooling=False)
             label_ids = 0
         # if mode == tf.estimator.ModeKeys.PREDICT and "id" in features:
         #    query_id = features["id"]
 
-        def dot_attention(q, k, v, v_mask=None, dropout=None):
-            # v_mask [B, T]
+        def max_attention_score(q, k):
+            # q [B, S, num_label, H], v [B, T, num_label, H]
+            q = tf.transpose(q, perm=[0, 3, 1, 2])
+            k = tf.transpose(k, perm=[0, 3, 1, 2])
             attention_scores = tf.matmul(q, k, transpose_b=True)
-            # attention_scores [B, S, T]
+            # attention_scores [B, num_label, S, T]
             attention_scores = tf.multiply(attention_scores,
                                            1.0 / math.sqrt(float(bert_config.hidden_size)))
-            if v_mask is not None:
-                v_mask = tf.expand_dims(v_mask, axis=[1])
-                adder = (1.0 - tf.cast(v_mask, tf.float32)) * -10000.0
-                attention_scores += adder
+            attention_scores = tf.reduce_sum(tf.reduce_sum(attention_scores, axis=-1), axis=-1)
+            return attention_scores
 
-            attention_probs = tf.nn.softmax(attention_scores)  # [B, S, T]
-            output = tf.matmul(attention_probs, v)
-            return output
-        doc_embedding = doc_embedding[:, :FLAGS.poly_first_m, :]
-        query_embedding = tf.expand_dims(query_embedding, axis=[1])
-        poly_mask = input_mask_b[:, :FLAGS.poly_first_m]
-        final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=poly_mask)
-        final_vecs = tf.squeeze(final_vecs, axis=[1])
+        query_embedding = tf.layer.dense(query_embedding, units=FLAGS.colbert_dim)
+        doc_embedding = tf.layer.dense(doc_embedding, units=FLAGS.colbert_dim)
+        B, S, H = modeling.get_shape_list(query_embedding)
+        _, T, H = modeling.get_shape_list(doc_embedding)
 
-        logits = tf.layers.dense(final_vecs, units=num_rele_label)
+        transform_weights = tf.get_variable(
+            "output_weights", [num_rele_label * FLAGS.colbert_dim, FLAGS.colbert_dim],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        query_embedding = tf.reshape(tf.matmul(query_embedding, transform_weights, transpose_b=True), [B, S, num_rele_label, H])
+        doc_embedding = tf.reshape(tf.matmul(doc_embedding, transform_weights, transpose_b=True), [B, T, num_rele_label, H])
+
+        query_embedding = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
+        doc_embedding = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
+
+        query_embedding = tf.expand_dims(tf.expand_dims(input_mask_a, axis=-1), axis=-1) * query_embedding
+        doc_embedding = tf.expand_dims(tf.expand_dims(input_mask_b, axis=-1), axis=-1) * doc_embedding
+
+        logits = max_attention_score(query_embedding, doc_embedding)
+
         probabilities = tf.nn.softmax(logits, axis=-1)
         log_probs = tf.nn.log_softmax(logits, axis=-1)
 
