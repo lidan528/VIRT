@@ -721,13 +721,15 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
 
         def max_attention_score(q, k):
             # q [B, S, num_label, H], v [B, T, num_label, H]
-            q = tf.transpose(q, perm=[0, 3, 1, 2])
-            k = tf.transpose(k, perm=[0, 3, 1, 2])
+            q = tf.transpose(q, perm=[0, 2, 1, 3])
+            k = tf.transpose(k, perm=[0, 2, 1, 3])
+            print(modeling.get_shape_list(q))
             attention_scores = tf.matmul(q, k, transpose_b=True)
             # attention_scores [B, num_label, S, T]
             attention_scores = tf.multiply(attention_scores,
                                            1.0 / math.sqrt(float(bert_config.hidden_size)))
-            attention_scores = tf.reduce_sum(tf.reduce_sum(attention_scores, axis=-1), axis=-1)
+            attention_scores = tf.reduce_sum(tf.reduce_max(attention_scores, axis=-1), axis=-1)
+            print(modeling.get_shape_list(attention_scores))
             return attention_scores
 
         query_embedding = tf.layers.dense(query_embedding, units=FLAGS.colbert_dim)
@@ -742,19 +744,19 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         query_embedding = tf.reshape(tf.matmul(query_embedding, transform_weights, transpose_b=True), [B, S, num_rele_label, H])
         doc_embedding = tf.reshape(tf.matmul(doc_embedding, transform_weights, transpose_b=True), [B, T, num_rele_label, H])
 
-        query_embedding = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
-        doc_embedding = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
+        query_embedding, _ = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
+        doc_embedding, _ = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
 
         query_mask = tf.expand_dims(input_mask_a, axis=-1)
         query_mask = tf.expand_dims(query_mask, axis=-1)
-        query_mask = tf.tile(query_mask, tf.constant([B, S, num_rele_label, H]))
-        query_embedding = tf.multiply(tf.cast(query_mask, dtype=tf.float32),
-                            query_embedding)
+        query_mask = tf.tile(query_mask, tf.constant([1, 1, num_rele_label, FLAGS.colbert_dim]))
+        query_mask = tf.cast(query_mask, dtype=tf.float32)
+        query_embedding = tf.multiply(query_mask, query_embedding)
+
         doc_mask = tf.expand_dims(input_mask_b, axis=-1)
         doc_mask = tf.expand_dims(doc_mask, axis=-1)
-        doc_mask = tf.tile(doc_mask, tf.constant([B, S, num_rele_label, H]))
-        doc_embedding = tf.multiply(tf.cas(doc_mask, dtype=tf.float32),
-                                    doc_embedding)
+        doc_mask = tf.tile(doc_mask, tf.constant([1, 1, num_rele_label, FLAGS.colbert_dim]))
+        doc_embedding = tf.multiply(tf.cast(doc_mask, dtype=tf.float32), doc_embedding)
 
         logits = max_attention_score(query_embedding, doc_embedding)
 
