@@ -1044,6 +1044,8 @@ def metric_latency(bert_config, batch_nums):
                                                                   FLAGS.max_seq_length])
         input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
                                                                  FLAGS.max_seq_length])
+        input_masks_b_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
+                                                                 FLAGS.max_seq_length])
         cached_embd_b_dataset_np = np.random.random(
             size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size])
 
@@ -1051,9 +1053,10 @@ def metric_latency(bert_config, batch_nums):
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         t_start = time.time()
-        for input_ids_np, input_masks_np, cached_emb_np in zip(input_ids_a_dataset_np, input_masks_a_dataset_np,
+        for input_ids_np, input_masks_a_np, input_masks_b_np, cached_emb_np in zip(input_ids_a_dataset_np, input_masks_a_dataset_np, input_masks_b_dataset_np,
                                                                cached_embd_b_dataset_np):
-            sess.run(result, feed_dict={input_ids_a_ph: input_ids_np, input_masks_a_ph: input_masks_np,
+            sess.run(result, feed_dict={input_ids_a_ph: input_ids_np, input_masks_a_ph: input_masks_a_np,
+                                        input_masks_b_ph: input_masks_b_np,
                                         cached_embd_b_ph: cached_emb_np})
         t_end = time.time()
 
