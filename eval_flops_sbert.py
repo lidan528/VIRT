@@ -1021,7 +1021,7 @@ def metric_latency(bert_config, batch_nums):
         input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
                                                                  FLAGS.max_seq_length])
         cached_embd_b_dataset_np = np.random.random(
-            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size])
+            size=[batch_nums, FLAGS.train_batch_size,  bert_config.hidden_size])
 
 
     with tf.Session() as sess:
