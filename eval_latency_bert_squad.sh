@@ -13,7 +13,7 @@ python eval_flops_bert.py \
   --vocab_file=$BERT_BASE_DIR/vocab.txt \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
   --init_checkpoint=$BERT_BASE_DIR/bert_model.ckpt \
-  --train_batch_size=1 \
+  --train_batch_size=28 \
   --max_seq_length=384 \
   --learning_rate=5e-5 \
   --num_train_epochs=6.0 \
