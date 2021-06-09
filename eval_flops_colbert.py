@@ -836,21 +836,7 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, inpu
         is_training=False,
         input_ids=input_ids_a_ph,
         use_one_hot_embeddings=FLAGS.use_tpu)
-    if FLAGS.pooling_strategy == "cls":
-        tf.logging.info("use cls embedding")
-        output_layer_a = model.get_pooled_output()
-
-    elif FLAGS.pooling_strategy == "mean":
-        tf.logging.info("use mean embedding")
-
-        output_layer = model.get_sequence_output()
-
-        mask = tf.cast(tf.expand_dims(input_masks_a_ph, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
-        masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
-        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
-        actual_token_nums = tf.reduce_sum(input_masks_a_ph, axis=-1)  # [bs_size]
-        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
-        output_layer_a = sum_masked_output_layer / actual_token_nums
+    output_layer_a = model.get_sequence_output()
 
     def max_attention_score(q, k):
         # q [B, S, num_label, H], v [B, T, num_label, H]
