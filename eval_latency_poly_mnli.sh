@@ -5,7 +5,7 @@ export CUDA_VISIBLE_DEVICES=0
 export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_base_pad_sep_realpool/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_base_pad_sep_realpooll/
 python eval_flops_polyencoder.py \
   --task_name=mnli \
   --pooling_strategy=mean \
