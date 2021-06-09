@@ -1009,7 +1009,7 @@ def metric_latency(bert_config, batch_nums):
         input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
                                                                  FLAGS.max_seq_length_query])
         cached_embd_b_dataset_np = np.random.random(
-            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size])
+            size=[batch_nums, FLAGS.train_batch_size, bert_config.hidden_size])
 
     else:
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
