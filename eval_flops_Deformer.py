@@ -981,7 +981,8 @@ def metric_latency(bert_config, batch_nums):
 
         input_ids_a_dataset_np = np.random.randint(0,5000, size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_query])
         input_masks_a_dataset_np = np.random.randint(0,2, size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_query])
-        cached_embd_b_dataset_np = np.random.random([])
+        cached_embd_b_dataset_np = np.random.random(size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size])
+
 
 
     elif task_name == 'boolq':
@@ -994,9 +995,15 @@ def metric_latency(bert_config, batch_nums):
             dtype=tf.float32, name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list),
                              sep_layers=11)
+        input_ids_a_dataset_np = np.random.randint(0, 5000, size=[batch_nums, FLAGS.train_batch_size,
+                                                                  FLAGS.max_seq_length_query])
+        input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
+                                                                 FLAGS.max_seq_length_query])
+        cached_embd_b_dataset_np = np.random.random(
+            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size])
 
 
-    else:
+    else:   #mnli
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
                                         name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
@@ -1005,14 +1012,21 @@ def metric_latency(bert_config, batch_nums):
                                           dtype=tf.float32, name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list),
                              sep_layers=11)
+        input_ids_a_dataset_np = np.random.randint(0, 5000, size=[batch_nums, FLAGS.train_batch_size,
+                                                                  FLAGS.max_seq_length])
+        input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
+                                                                 FLAGS.max_seq_length])
+        cached_embd_b_dataset_np = np.random.random(
+            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size])
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        opt_builder = tf.profiler.ProfileOptionBuilder
-        prof_options = opt_builder.float_operation()
-        prof_options['hide_name_regexes'] = ['.*/Initializer/.*']
-        tfprof_node = tf.profiler.profile(sess.graph, options=prof_options)
-        tf.logging.info('GFLOPs: {};    '.format(tfprof_node.total_float_ops / 1000000000.0))
+        t_start = time.time()
+        for input_ids_np, input_masks_np, cached_emb_np in zip(input_ids_a_dataset_np, input_masks_a_dataset_np, cached_embd_b_dataset_np):
+            sess.run(result, feed_dict={input_ids_a_ph: input_ids_np, input_masks_a_ph: input_masks_np, cached_embd_b_ph: cached_emb_np})
+        t_end = time.time()
+
+        tf.logging.info('Latency: {};    '.format((t_end - t_start) / batch_nums))
 
 
 
@@ -1027,8 +1041,8 @@ def main(_):
             "was only trained up to sequence length %d" %
             (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
-    metric_flops(bert_config)
-
+    # metric_flops(bert_config)
+    metric_latency(bert_config, 100)
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("task_name")
