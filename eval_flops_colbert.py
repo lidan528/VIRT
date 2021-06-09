@@ -992,7 +992,7 @@ def metric_flops(bert_config):
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks_a')
         input_masks_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks_b')
-        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, input_masks_b_ph, cached_embd_b_ph, len(label_list))
 
     with tf.Session() as sess:
