@@ -891,9 +891,9 @@ def metric_latency(bert_config, batch_num):
     metric_func = metric_funcs[task_name]
     label_list = processor.get_labels() if task_name in processors else [0]
     input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
-                                  name='input_ids')
+                                  name='input_ids_ph')
     input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
-                                    name='input_masks')
+                                    name='input_masks_ph')
     result = metric_func(bert_config, input_ids_ph, input_masks_ph, len(label_list))
 
     with tf.Session() as sess:
@@ -902,7 +902,7 @@ def metric_latency(bert_config, batch_num):
         input_masks_dataset_np = np.random.randint(0,2, size=[batch_num, FLAGS.train_batch_size, FLAGS.max_seq_length])
         t_start = time.time()
         for input_ids_np, input_masks_np in zip(input_ids_dataset_np, input_masks_dataset_np):
-            sess.run(result, feed_dict={'input_ids':input_ids_np, 'input_masks':input_masks_np})
+            sess.run(result, feed_dict={'input_ids_ph':input_ids_np, 'input_masks_ph':input_masks_np})
         t_end = time.time()
 
         tf.logging.info('Latency: {};    '.format((t_end-t_start) / batch_num))
