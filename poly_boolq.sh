@@ -1,8 +1,9 @@
 export CUDA_VISIBLE_DEVICES=0
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/boolq/ #全局变量 数据集所在地址
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/sbert_base_bipartition/
-python _--sbert_boolq.py \
+poly_first_m=16
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/boolq/poly_first_${poly_first_m}_base_bipartition/
+python poly_boolq.py \
   --task_name=boolq \
   --do_train=true \
   --do_eval=true \
@@ -17,4 +18,5 @@ python _--sbert_boolq.py \
   --learning_rate=5e-5 \
   --num_train_epochs=30.0 \
   --output_dir=$OUTPUT \
+  --poly_m=
   --pooling_strategy=mean
