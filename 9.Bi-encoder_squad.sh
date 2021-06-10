@@ -1,8 +1,8 @@
 export CUDA_VISIBLE_DEVICES=1
 export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/squad #全局变量 数据集所在地址
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/sbert_base_meanpool_v1/
-python _sbert.py \
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/squad/Bi-encoder/
+python Bi-encoder_squad.py \
   --task_name=squad \
   --train_file=$MY_DATASET/squad_v1.1-train.jsonl \
   --dev_file=$MY_DATASET/squad_v1.1-dev.jsonl \

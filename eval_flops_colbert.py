@@ -16,6 +16,7 @@ import collections
 import random
 
 import sys
+import math
 import numpy as np
 import time
 
@@ -152,6 +153,11 @@ flags.DEFINE_integer(
     "max_seq_length_doc", 317,    # 384-64-3 in bert
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
+
+flags.DEFINE_integer(
+    "colbert_dim", 0,
+    "colbert_dims numbers"
+)
 
 
 class InputExample(object):
@@ -823,7 +829,7 @@ def serving_input_receiver_fn(max_seq_length):
     return tf.estimator.export.build_raw_serving_input_receiver_fn(feature_spec)
 
 
-def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cached_emb_b,  num_labels):
+def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, input_mask_b_ph,  cached_emb_b,  num_labels):
     """
     只有a需要处理输入, b端直接用已有的缓存
     """
@@ -832,27 +838,50 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cach
         is_training=False,
         input_ids=input_ids_a_ph,
         use_one_hot_embeddings=FLAGS.use_tpu)
-    if FLAGS.pooling_strategy == "cls":
-        tf.logging.info("use cls embedding")
-        output_layer_a = model.get_pooled_output()
+    output_layer_a = model.get_sequence_output()
 
-    elif FLAGS.pooling_strategy == "mean":
-        tf.logging.info("use mean embedding")
+    def max_attention_score(q, k):
+        # q [B, S, num_label, H], v [B, T, num_label, H]
+        q = tf.transpose(q, perm=[0, 2, 1, 3])
+        k = tf.transpose(k, perm=[0, 2, 1, 3])
+        print(modeling.get_shape_list(q))
+        attention_scores = tf.matmul(q, k, transpose_b=True)
+        # attention_scores [B, num_label, S, T]
+        attention_scores = tf.multiply(attention_scores,
+                                       1.0 / math.sqrt(float(bert_config.hidden_size)))
+        attention_scores = tf.reduce_sum(tf.reduce_max(attention_scores, axis=-1), axis=-1)
+        print(modeling.get_shape_list(attention_scores))
+        return attention_scores
 
-        output_layer = model.get_sequence_output()
+    query_embedding = tf.layers.dense(output_layer_a, units=FLAGS.colbert_dim)
+    doc_embedding = tf.layers.dense(cached_emb_b, units=FLAGS.colbert_dim)
+    B, S, H = modeling.get_shape_list(query_embedding)
+    _, T, H = modeling.get_shape_list(doc_embedding)
 
-        mask = tf.cast(tf.expand_dims(input_masks_a_ph, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
-        masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
-        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
-        actual_token_nums = tf.reduce_sum(input_masks_a_ph, axis=-1)  # [bs_size]
-        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
-        output_layer_a = sum_masked_output_layer / actual_token_nums
+    transform_weights = tf.get_variable(
+        "output_weights", [num_labels * FLAGS.colbert_dim, FLAGS.colbert_dim],
+        initializer=tf.truncated_normal_initializer(stddev=0.02))
 
+    query_embedding = tf.reshape(tf.matmul(query_embedding, transform_weights, transpose_b=True),
+                                 [B, S, num_labels, H])
+    doc_embedding = tf.reshape(tf.matmul(doc_embedding, transform_weights, transpose_b=True), [B, T, num_labels, H])
 
-    sub_embedding = tf.abs(output_layer_a - cached_emb_b)
-    max_embedding = tf.square(tf.reduce_max([output_layer_a, cached_emb_b], axis=0))
-    regular_embedding = tf.concat([output_layer_a, cached_emb_b, sub_embedding, max_embedding], -1)
-    logits = tf.layers.dense(regular_embedding, units=num_labels)
+    query_embedding, _ = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
+    doc_embedding, _ = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
+
+    query_mask = tf.expand_dims(input_masks_a_ph, axis=-1)
+    query_mask = tf.expand_dims(query_mask, axis=-1)
+    query_mask = tf.tile(query_mask, tf.constant([1, 1, num_labels, FLAGS.colbert_dim]))
+    query_mask = tf.cast(query_mask, dtype=tf.float32)
+    query_embedding = tf.multiply(query_mask, query_embedding)
+
+    doc_mask = tf.expand_dims(input_mask_b_ph, axis=-1)
+    doc_mask = tf.expand_dims(doc_mask, axis=-1)
+    doc_mask = tf.tile(doc_mask, tf.constant([1, 1, num_labels, FLAGS.colbert_dim]))
+    doc_embedding = tf.multiply(tf.cast(doc_mask, dtype=tf.float32), doc_embedding)
+
+    logits = max_attention_score(query_embedding, doc_embedding)
+
     probabilities = tf.nn.softmax(logits, axis=-1)
 
     return probabilities
@@ -949,9 +978,10 @@ def metric_flops(bert_config):
 
     else:
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
-        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
-        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
-        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
+        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks_a')
+        input_masks_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks_b')
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
+        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, input_masks_b_ph, cached_embd_b_ph, len(label_list))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -985,17 +1015,11 @@ def metric_latency(bert_config, batch_nums):
                                         name='input/input_ids')
         input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                           name='input/input_masks')
-        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size], dtype=tf.float32,
-                                          name='input/cached_emd_b')
+        cached_embd_b_ph = tf.placeholder(
+            shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size], dtype=tf.float32,
+            name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph,
-                                          len(label_list))
-        input_ids_a_dataset_np = np.random.randint(0, 5000, size=[batch_nums, FLAGS.train_batch_size,
-                                                                  FLAGS.max_seq_length_query])
-        input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
-                                                                 FLAGS.max_seq_length_query])
-        cached_embd_b_dataset_np = np.random.random(
-            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size])
-
+                             len(label_list))
     elif task_name == 'boolq':
         input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_query], dtype=tf.int32,
                                         name='input/input_ids')
@@ -1004,32 +1028,35 @@ def metric_latency(bert_config, batch_nums):
         cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32,
                                           name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
-        input_ids_a_dataset_np = np.random.randint(0, 5000, size=[batch_nums, FLAGS.train_batch_size,
-                                                                  FLAGS.max_seq_length_query])
-        input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
-                                                                 FLAGS.max_seq_length_query])
-        cached_embd_b_dataset_np = np.random.random(
-            size=[batch_nums, FLAGS.train_batch_size, bert_config.hidden_size])
 
     else:
-        input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
-        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
-        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, bert_config.hidden_size], dtype=tf.float32, name='input/cached_emd_b')
-        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list))
+        input_ids_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
+                                        name='input/input_ids')
+        input_masks_a_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
+                                          name='input/input_masks_a')
+        input_masks_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
+                                          name='input/input_masks_b')
+        cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size],
+                                          dtype=tf.float32, name='input/cached_emd_b')
+        result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, input_masks_b_ph, cached_embd_b_ph,
+                             len(label_list))
         input_ids_a_dataset_np = np.random.randint(0, 5000, size=[batch_nums, FLAGS.train_batch_size,
                                                                   FLAGS.max_seq_length])
         input_masks_a_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
                                                                  FLAGS.max_seq_length])
+        input_masks_b_dataset_np = np.random.randint(0, 2, size=[batch_nums, FLAGS.train_batch_size,
+                                                                 FLAGS.max_seq_length])
         cached_embd_b_dataset_np = np.random.random(
-            size=[batch_nums, FLAGS.train_batch_size,  bert_config.hidden_size])
+            size=[batch_nums, FLAGS.train_batch_size, FLAGS.max_seq_length, bert_config.hidden_size])
 
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         t_start = time.time()
-        for input_ids_np, input_masks_np, cached_emb_np in zip(input_ids_a_dataset_np, input_masks_a_dataset_np,
+        for input_ids_np, input_masks_a_np, input_masks_b_np, cached_emb_np in zip(input_ids_a_dataset_np, input_masks_a_dataset_np, input_masks_b_dataset_np,
                                                                cached_embd_b_dataset_np):
-            sess.run(result, feed_dict={input_ids_a_ph: input_ids_np, input_masks_a_ph: input_masks_np,
+            sess.run(result, feed_dict={input_ids_a_ph: input_ids_np, input_masks_a_ph: input_masks_a_np,
+                                        input_masks_b_ph: input_masks_b_np,
                                         cached_embd_b_ph: cached_emb_np})
         t_end = time.time()
 

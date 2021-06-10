@@ -28,6 +28,8 @@ import tokenization
 import tensorflow as tf
 import json
 from tensorflow.python.framework import graph_util
+import time
+import numpy as np
 
 
 flags = tf.flags
@@ -860,8 +862,8 @@ def metric_flops(bert_config):
     metric_func = metric_funcs[task_name]
     label_list = processor.get_labels() if task_name in processors else [0]
 
-    input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_ids')
-    input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input/input_masks')
+    input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input_ids')
+    input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32, name='input_masks')
     result = metric_func(bert_config, input_ids_ph, input_masks_ph, len(label_list))
 
     with tf.Session() as sess:
@@ -871,6 +873,42 @@ def metric_flops(bert_config):
         prof_options['hide_name_regexes'] = ['.*/Initializer/.*']
         tfprof_node = tf.profiler.profile(sess.graph, options=prof_options)
         tf.logging.info('GFLOPs: {};    '.format(tfprof_node.total_float_ops / 1000000000.0))
+
+
+
+def metric_latency(bert_config, batch_num):
+    processors = {
+        "mnli": MnliProcessor,
+        "qqp": QqpProcessor
+    }
+    metric_funcs = {
+        "mnli": create_model_metric_mnli,
+        "squad": create_model_metric_squad
+    }
+
+    task_name = FLAGS.task_name.lower()
+    processor = processors[task_name]() if task_name in processors else None
+    metric_func = metric_funcs[task_name]
+    label_list = processor.get_labels() if task_name in processors else [0]
+    input_ids_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
+                                  name='input_ids_ph')
+    input_masks_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length], dtype=tf.int32,
+                                    name='input_masks_ph')
+    result = metric_func(bert_config, input_ids_ph, input_masks_ph, len(label_list))
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        input_ids_dataset_np = np.random.randint(0,5000, size=[batch_num, FLAGS.train_batch_size, FLAGS.max_seq_length])
+        input_masks_dataset_np = np.random.randint(0,2, size=[batch_num, FLAGS.train_batch_size, FLAGS.max_seq_length])
+        t_start = time.time()
+        for input_ids_np, input_masks_np in zip(input_ids_dataset_np, input_masks_dataset_np):
+            sess.run(result, feed_dict={input_ids_ph : input_ids_np, input_masks_ph : input_masks_np})
+        t_end = time.time()
+
+        tf.logging.info('Latency: {};    '.format((t_end-t_start) / batch_num))
+
+
+
 
 
 def main(_):
@@ -885,8 +923,8 @@ def main(_):
         "was only trained up to sequence length %d" %
         (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
-  metric_flops(bert_config)
-
+  # metric_flops(bert_config)
+  metric_latency(bert_config, batch_num=100)
 
 
 
