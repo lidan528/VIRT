@@ -1546,12 +1546,16 @@ def get_attention_loss_with_weight(model_student_query, model_student_doc, model
 
     flat_att_cross = []
     for query2doc_cross, doc2query_cross in zip(flat_query2doc_list_cross, flat_doc2query_list_cross):
-        # [bs, num_heads, seq_len1], [bs, num_heads, seq_len2]
+        # [bs, seq_len1], [bs, seq_len2]
+        print("******************************, shape flat_att_cross_query2doc:", modeling.get_shape_list(query2doc_cross))
+        print("******************************, shape flat_att_cross_doc2query:", modeling.get_shape_list(doc2query_cross))
         layer_att_cross = tf.concat([query2doc_cross, doc2query_cross], axis=-1)
         flat_att_cross.append(layer_att_cross)
 
     flat_att_bi = tf.stack(flat_att_bi, axis=0)                 #[12, bs, seq_len(dim)]
     flat_att_cross = tf.stack(flat_att_cross, axis=0)           #[12, bs, seq_len(dim)]
+    print("******************************, shape flat_att_bi:", modeling.get_shape_list(flat_att_bi))
+    print("******************************, shape flat_att_cross:", modeling.get_shape_list(flat_att_cross))
     flat_att_bi = tf.transpose(flat_att_bi, [1, 0, 2])          #[bs, 12, seq_len(dim)]
     flat_att_cross = tf.transpose(flat_att_cross, [1, 0, 2])    #[bs, 12, seq_len(dim)]
     dim = modeling.get_shape_list(flat_att_bi, expected_rank=[3])[-1]
