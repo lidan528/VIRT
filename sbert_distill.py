@@ -1547,7 +1547,7 @@ def get_attention_loss_with_weight(model_student_query, model_student_doc, model
     flat_att_cross = []
     for query2doc_cross, doc2query_cross in zip(flat_query2doc_list_cross, flat_doc2query_list_cross):
         # [bs, num_heads, seq_len1], [bs, num_heads, seq_len2]
-        layer_att_cross = tf.concate([query2doc_cross, doc2query_cross], axis=-1)
+        layer_att_cross = tf.concat([query2doc_cross, doc2query_cross], axis=-1)
         flat_att_cross.append(layer_att_cross)
 
     flat_att_bi = tf.stack(flat_att_bi, axis=0)                 #[12, bs, seq_len(dim)]
