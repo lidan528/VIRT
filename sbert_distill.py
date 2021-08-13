@@ -1662,7 +1662,7 @@ def use_all_layer_embedding(stu_model_query, stu_model_doc, input_mask_query, in
     last_regular_embedding = tf.concat([last_pooled_layer_query, last_pooled_layer_doc, last_sub_embedding, last_max_embedding], -1)
 
     #--------------combine weighted_sum and last layer-----------------------
-    final_embedding = tf.reduce_max([weighted_sum, last_regular_embedding])
+    final_embedding = tf.reduce_max([weighted_sum, last_regular_embedding], axis=0)
 
     return final_embedding
 
