@@ -1528,7 +1528,7 @@ def get_attention_loss_with_weight(model_student_query, model_student_doc, model
         #------------------------newly added for computed weighted mapping--------------------------------------------
         multiplyed_doc2query_cross = bert_att_score_doc_query * doc_query_att_matrix_mask_multiplyer
         flat_doc2query_cross = tf.reduce_mean(multiplyed_doc2query_cross, axis=-1)
-        flat_doc2query_cross = tf.reduce_mean(flat_doc2query_cross, axis=-1)
+        flat_doc2query_cross = tf.reduce_mean(flat_doc2query_cross, axis=1)
         flat_doc2query_list_cross.append(flat_doc2query_cross)
 
         bert_att_score_doc_query = bert_att_score_doc_query + doc_query_att_matrix_mask_adder
