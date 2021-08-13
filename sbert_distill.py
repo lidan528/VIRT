@@ -1027,6 +1027,7 @@ def model_fn_builder(bert_config,
                                                     is_reuse = tf.AUTO_REUSE)
 
         if FLAGS.use_all_layer_emb:
+            tf.logging.info("***************use all layer embedding to predict...*****************")
             regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
         else:
             sub_embedding = tf.abs(query_embedding - doc_embedding)
@@ -1034,6 +1035,7 @@ def model_fn_builder(bert_config,
             regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
 
         if FLAGS.use_resnet_predict:
+            tf.logging.info("*************use resnet in prediction..************************")
             logits_student, probabilities_student, log_probs_student = \
             get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
         else:
@@ -1087,6 +1089,7 @@ def model_fn_builder(bert_config,
         if FLAGS.use_kd_att:
             tf.logging.info('use att as distill object...')
             if FLAGS.use_weighted_att:
+                tf.logging.info("*******************use weighted att distillation...******************")
                 distill_loss_att = get_attention_loss_with_weight(model_student_query=model_stu_query,
                                                       model_student_doc=model_stu_doc,
                                                       model_teacher=model_teacher,
