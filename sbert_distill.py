@@ -1580,7 +1580,7 @@ def get_attention_loss_with_weight(model_student_query, model_student_doc, model
 
     origin_doc2query_list_cross = tf.stack(origin_doc2query_list_cross, axis=0) #[12, bs, num_heads, seq_len, seq_len]
     origin_doc2query_list_cross = tf.transpose(origin_doc2query_list_cross, [1, 0, 2, 3, 4])    #[bs, 12, num_heads, seq_len1, seq_len2]
-    _1bs, _1layer_num, _1num_heads, _1seq_l1, _1seq_l2 = modeling.get_shape_list(origin_query2doc_list_cross, expected_rank=[5])
+    _1bs, _1layer_num, _1num_heads, _1seq_l1, _1seq_l2 = modeling.get_shape_list(origin_doc2query_list_cross, expected_rank=[5])
     origin_doc2query_list_cross = tf.reshape(origin_doc2query_list_cross, [_1bs, _1layer_num, -1])  # [bs, 12, num_heads*seq_len1*seq_len2]
     weighted_doc2query_list_cross = tf.matmul(mapped_score, origin_doc2query_list_cross)
     weighted_doc2query_list_cross = tf.reshape(weighted_doc2query_list_cross, [_1layer_num,_1bs,_1num_heads,_1seq_l1,_1seq_l2])
