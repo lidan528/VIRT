@@ -1090,7 +1090,7 @@ def model_fn_builder(bert_config,
             tf.logging.info('use att as distill object...')
             if FLAGS.use_weighted_att:
                 tf.logging.info("*******************use weighted att distillation...******************")
-                distill_loss_att = get_attention_loss_with_weight(model_student_query=model_stu_query,
+                distill_loss_att = get_attention_loss_with_weight_head(model_student_query=model_stu_query,
                                                       model_student_doc=model_stu_doc,
                                                       model_teacher=model_teacher,
                                                       input_mask_sbert_query=input_mask_sbert_a,
@@ -1651,7 +1651,7 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
         #------------------------newly added for computed weighted mapping--------------------------------------------
         multiplyed_query2doc_bi = query_doc_qk * query_doc_att_matrix_mask_multiplyer  # [bs, num_heads, seq_len, seq_len]
         flat_query2doc_bi = tf.reduce_mean(multiplyed_query2doc_bi, axis=-1)     #[bs, num_heads, seq_len]
-        flat_query2doc_bi = tf.reduce_mean(flat_query2doc_bi, axis=1)       # [bs, seq_len]
+        # flat_query2doc_bi = tf.reduce_mean(flat_query2doc_bi, axis=1)       # [bs, seq_len]
         flat_query2doc_list_bi.append(flat_query2doc_bi)
         #----------------------------------------------------------------------------------------------------------------
         sbert_att_shape = modeling.get_shape_list(sbert_query_qw, expected_rank=4)  # [bs, num_heads, seq_len, head_dim]
@@ -1663,8 +1663,8 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
         bert_att_probs_query_doc = tf.nn.softmax(bert_att_score_query_doc)
         origin_query2doc_list_cross.append(bert_att_probs_query_doc)        # ************************
         #------------------------------newly added for computed weighted mapping--------------------------------------
-        flat_query2doc_cross = tf.reduce_mean(multiplyed_query2doc_cross, axis=-1)
-        flat_query2doc_cross = tf.reduce_mean(flat_query2doc_cross, axis=1)
+        flat_query2doc_cross = tf.reduce_mean(multiplyed_query2doc_cross, axis=-1)  # [bs, num_heads, seq_len]
+        # flat_query2doc_cross = tf.reduce_mean(flat_query2doc_cross, axis=1)
         flat_query2doc_list_cross.append(flat_query2doc_cross)
 
 
@@ -1688,7 +1688,7 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
 
         multiplyed_doc2query_bi = doc_query_qk * doc_query_att_matrix_mask_multiplyer  # [bs, num_heads, seq_len, seq_len]
         flat_doc2query_bi = tf.reduce_mean(multiplyed_doc2query_bi, axis=-1)  # [bs, num_heads, seq_len]
-        flat_doc2query_bi = tf.reduce_mean(flat_doc2query_bi, axis=1)
+        # flat_doc2query_bi = tf.reduce_mean(flat_doc2query_bi, axis=1)
         flat_doc2query_list_bi.append(flat_doc2query_bi)
         # ----------------------------------------------------------------------------------------------------------------
 
@@ -1696,7 +1696,7 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
         #------------------------newly added for computed weighted mapping--------------------------------------------
         multiplyed_doc2query_cross = bert_att_score_doc_query * doc_query_att_matrix_mask_multiplyer
         flat_doc2query_cross = tf.reduce_mean(multiplyed_doc2query_cross, axis=-1)
-        flat_doc2query_cross = tf.reduce_mean(flat_doc2query_cross, axis=1)
+        # flat_doc2query_cross = tf.reduce_mean(flat_doc2query_cross, axis=1)
         flat_doc2query_list_cross.append(flat_doc2query_cross)
 
         bert_att_score_doc_query = bert_att_score_doc_query + doc_query_att_matrix_mask_adder
@@ -1708,63 +1708,60 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
 
     flat_att_bi = []
     for query2doc_bi, doc2query_bi in zip(flat_query2doc_list_bi, flat_doc2query_list_bi):
-        # [bs, seq_len1], [bs, seq_len2]
+        # [bs, num_heads, seq_len1], [bs, num_heads, seq_len2]
         layer_att_bi = tf.concat([query2doc_bi, doc2query_bi], axis=-1)
         flat_att_bi.append(layer_att_bi)
 
     flat_att_cross = []
     for query2doc_cross, doc2query_cross in zip(flat_query2doc_list_cross, flat_doc2query_list_cross):
-        # [bs, seq_len1], [bs, seq_len2]
+        # [bs, num_heads, seq_len1], [bs, num_heads, seq_len2]
         print("******************************, shape flat_att_cross_query2doc:", modeling.get_shape_list(query2doc_cross))
         print("******************************, shape flat_att_cross_doc2query:", modeling.get_shape_list(doc2query_cross))
-        layer_att_cross = tf.concat([query2doc_cross, doc2query_cross], axis=-1)
+        layer_att_cross = tf.concat([query2doc_cross, doc2query_cross], axis=-1)        #[bs, num_heads, len1+len2]
         flat_att_cross.append(layer_att_cross)
 
-    flat_att_bi = tf.stack(flat_att_bi, axis=0)                 #[12, bs, seq_len(dim)]
-    flat_att_cross = tf.stack(flat_att_cross, axis=0)           #[12, bs, seq_len(dim)]
-    print("******************************, shape flat_att_bi:", modeling.get_shape_list(flat_att_bi))
-    print("******************************, shape flat_att_cross:", modeling.get_shape_list(flat_att_cross))
-    flat_att_bi = tf.transpose(flat_att_bi, [1, 0, 2])          #[bs, 12, seq_len(dim)]
-    flat_att_cross = tf.transpose(flat_att_cross, [1, 0, 2])    #[bs, 12, seq_len(dim)]
-    dim = modeling.get_shape_list(flat_att_bi, expected_rank=[3])[-1]
-    mapped_flat_att_bi = tf.layers.dense(
-        flat_att_bi,
-        dim,
-        activation=None,
-        name="bi2cross_map",
-        kernel_initializer=modeling.create_initializer(0.02)
-    )       #[bs, 12, seq_len(dim)]
-    mapped_score = tf.matmul(mapped_flat_att_bi, flat_att_cross, transpose_b=True)      # [bs, 12, 12]
-    mapped_score = tf.multiply(mapped_score,
+    # flat_att_bi = tf.stack(flat_att_bi, axis=0)                 #[12, bs, num_heads, seq_len(dim)]
+    # flat_att_cross = tf.stack(flat_att_cross, axis=0)           #[12, bs, num_heads, seq_len(dim)]
+    dim = modeling.get_shape_list(flat_att_bi[-1], expected_rank=[3])[-1]
+    loss, cnt = 0, 0
+    for layer_id, (layer_att_bi, layer_att_cross, layer_query2doc_bi, layer_query2doc_cross, layer_doc2query_bi, layer_doc2query_cross) in \
+                                                                    enumerate(zip(flat_att_bi, flat_att_cross,
+                                                                   origin_query2doc_list_bi, origin_query2doc_list_cross,
+                                                                   origin_doc2query_list_bi, origin_doc2query_list_cross)):
+        mapped_flat_att_bi = tf.layers.dense(
+            layer_att_bi,
+            dim,
+            activation=None,
+            name="bi2cross_map_"+str(layer_id),
+            kernel_initializer=modeling.create_initializer(0.02)
+        )  # [bs, num_heads, seq_len(dim)]
+        mapped_score = tf.matmul(mapped_flat_att_bi, layer_att_cross, transpose_b=True) #[bs, num_heads, num_heads]
+        mapped_score = tf.multiply(mapped_score,
                                    1.0 / math.sqrt(float(dim)))
-    mapped_score = tf.nn.softmax(mapped_score)
+        mapped_score = tf.nn.softmax(mapped_score)                  #[bs, num_heads, num_heads]
+        # layer_query2doc_cross: [bs, num_heads, seq_len, seq_len]
+        bs, num_heads, seq_len1_query2doc, seq_len2_query2doc = modeling.get_shape_list(layer_query2doc_cross, expected_rank=[4])
+        _layer_query2doc_cross = tf.reshape(layer_query2doc_cross, [bs, num_heads, -1])
+        weighted_layer_query2doc_cross = tf.matmul(mapped_score, _layer_query2doc_cross)
+        weighted_layer_query2doc_cross = tf.reshape(weighted_layer_query2doc_cross, [bs, num_heads, seq_len1_query2doc, seq_len2_query2doc])
+        # [bs, num_heads, seq_len, seq_len]
+        loss_query2doc = tf.square(weighted_layer_query2doc_cross - layer_query2doc_bi)
+        loss_query2doc = tf.reduce_sum(loss_query2doc) / (
+                    1.0 * tf.cast(bs * num_heads * seq_len1_query2doc, dtype=tf.float32))
 
-    origin_query2doc_list_cross = tf.stack(origin_query2doc_list_cross, axis=0)  #[12, bs, num_heads, seq_len, seq_len]
-    origin_query2doc_list_cross = tf.transpose(origin_query2doc_list_cross, [1, 0, 2, 3, 4])    #[bs, 12, num_heads, seq_len1, seq_len2]
-    bs, layer_num, num_heads, seq_l1, seq_l2 = modeling.get_shape_list(origin_query2doc_list_cross, expected_rank=[5])
-    origin_query2doc_list_cross = tf.reshape(origin_query2doc_list_cross, [bs, layer_num, -1])  # [bs, 12, num_heads*seq_len1*seq_len2]
-    weighted_query2doc_list_cross = tf.matmul(mapped_score, origin_query2doc_list_cross)    # [bs, 12, num_heads*seq_len1*seq_len2]
-    weighted_query2doc_list_cross = tf.reshape(weighted_query2doc_list_cross, [layer_num,bs,num_heads,seq_l1,seq_l2])
+        bs, num_heads, seq_len1_doc2query, seq_len2_doc2query = modeling.get_shape_list(layer_doc2query_cross,
+                                                                                        expected_rank=[4])
+        _layer_doc2query_cross = tf.reshape(layer_doc2query_cross, [bs, num_heads, -1])
+        weighted_layer_doc2query_cross = tf.matmul(mapped_score, _layer_doc2query_cross)
+        weighted_layer_doc2query_cross = tf.reshape(weighted_layer_doc2query_cross, [bs, num_heads, seq_len1_doc2query, seq_len2_doc2query])
+        loss_doc2query = tf.square(weighted_layer_doc2query_cross - layer_doc2query_bi)
+        loss_doc2query = tf.reduce_sum(loss_doc2query) / (
+                    1.0 * tf.cast(bs * num_heads * seq_len1_doc2query, dtype=tf.float32))
 
-    origin_doc2query_list_cross = tf.stack(origin_doc2query_list_cross, axis=0) #[12, bs, num_heads, seq_len, seq_len]
-    origin_doc2query_list_cross = tf.transpose(origin_doc2query_list_cross, [1, 0, 2, 3, 4])    #[bs, 12, num_heads, seq_len1, seq_len2]
-    _1bs, _1layer_num, _1num_heads, _1seq_l1, _1seq_l2 = modeling.get_shape_list(origin_doc2query_list_cross, expected_rank=[5])
-    origin_doc2query_list_cross = tf.reshape(origin_doc2query_list_cross, [_1bs, _1layer_num, -1])  # [bs, 12, num_heads*seq_len1*seq_len2]
-    weighted_doc2query_list_cross = tf.matmul(mapped_score, origin_doc2query_list_cross)
-    weighted_doc2query_list_cross = tf.reshape(weighted_doc2query_list_cross, [_1layer_num,_1bs,_1num_heads,_1seq_l1,_1seq_l2])
+        loss += (loss_query2doc+loss_doc2query)
+        cnt += 1.0
 
-    origin_query2doc_list_bi = tf.stack(origin_query2doc_list_bi, axis=0)   #[12, bs, num_heads, seq_len, seq_len]
-    origin_doc2query_list_bi = tf.stack(origin_doc2query_list_bi, axis=0)   #[12, bs, num_heads, seq_len, seq_len]
-
-    loss_query2doc = tf.square(origin_query2doc_list_bi - weighted_query2doc_list_cross)
-    loss_query2doc = tf.reduce_sum(loss_query2doc) / (1.0 * tf.cast(bs * num_heads * layer_num * seq_l1, dtype=tf.float32))
-
-    loss_doc2query = tf.square(origin_doc2query_list_bi - weighted_doc2query_list_cross)
-    loss_doc2query = tf.reduce_sum(loss_doc2query) / (1.0 * tf.cast(_1bs * _1num_heads * _1layer_num * _1seq_l1, dtype=tf.float32))
-
-    loss = (loss_query2doc + loss_doc2query) / 2.0
-
-    return loss
+    return loss / cnt
 
 
 def get_pooled_embeddings(encode_layer, input_mask):
