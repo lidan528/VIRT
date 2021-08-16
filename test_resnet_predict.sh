@@ -7,7 +7,7 @@ export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/mnli/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/mnli/s_bert_distll_test_resnet_predict/
-python sbert_distill.py \
+python3 sbert_distill.py \
   --task_name=mnli \
   --pooling_strategy=mean \
   --do_train=true \
