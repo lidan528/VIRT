@@ -1589,10 +1589,10 @@ def get_attention_loss_with_weight(model_student_query, model_student_doc, model
     origin_doc2query_list_bi = tf.stack(origin_doc2query_list_bi, axis=0)   #[12, bs, num_heads, seq_len, seq_len]
 
     loss_query2doc = tf.square(origin_query2doc_list_bi - weighted_query2doc_list_cross)
-    loss_query2doc = tf.reduce_sum(loss_query2doc) / (1.0 * float(bs * num_heads * layer_num * seq_l1))
+    loss_query2doc = tf.reduce_sum(loss_query2doc) / (1.0 * tf.cast(bs * num_heads * layer_num * seq_l1, dtype=tf.float32))
 
     loss_doc2query = tf.square(origin_doc2query_list_bi - weighted_doc2query_list_cross)
-    loss_doc2query = tf.reduce_sum(loss_doc2query) / (1.0 * float(_1bs * _1num_heads * _1layer_num * _1seq_l1))
+    loss_doc2query = tf.reduce_sum(loss_doc2query) / (1.0 * tf.cast(_1bs * _1num_heads * _1layer_num * _1seq_l1, dtype=tf.float32))
 
     loss = (loss_query2doc + loss_doc2query) / 2.0
 
