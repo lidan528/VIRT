@@ -30,5 +30,6 @@ python _--sbert_distill_boolq.py \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.4 \
   --use_kd_att=true \
-  --kd_weight_att=700
+  --kd_weight_att=700 \
+  use_resnet_predict=true
 
