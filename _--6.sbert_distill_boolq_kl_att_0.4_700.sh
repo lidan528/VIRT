@@ -31,5 +31,5 @@ python _--sbert_distill_boolq.py \
   --kd_weight_logit=0.4 \
   --use_kd_att=true \
   --kd_weight_att=700 \
-  use_resnet_predict=true
+  --use_resnet_predict=true
 
