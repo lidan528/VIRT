@@ -1090,7 +1090,7 @@ def model_fn_builder(bert_config,
             tf.logging.info('use att as distill object...')
             if FLAGS.use_weighted_att:
                 tf.logging.info("*******************use weighted att distillation...******************")
-                distill_loss_att = get_attention_loss_with_weight_head(model_student_query=model_stu_query,
+                distill_loss_att = get_attention_loss_with_weight_layer(model_student_query=model_stu_query,
                                                       model_student_doc=model_stu_doc,
                                                       model_teacher=model_teacher,
                                                       input_mask_sbert_query=input_mask_sbert_a,
