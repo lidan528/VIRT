@@ -216,6 +216,8 @@ flags.DEFINE_string(
     "cls or mean"
 )
 
+flags.DEFINE_bool("use_resnet_predict", False, "Whether to use resnet in predict.")
+
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
@@ -1080,10 +1082,15 @@ def model_fn_builder(bert_config,
         sub_embedding = tf.abs(query_embedding - doc_embedding)
         max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
         regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
-        logits_student, probabilities_student, log_probs_student = \
-            get_prediction_student(student_output_layer=regular_embedding,
-                                   num_labels=num_rele_label,
-                                   is_training=is_training)
+        if FLAGS.use_resnet_predict:
+            tf.logging.info("*************use resnet in prediction..************************")
+            logits_student, probabilities_student, log_probs_student = \
+                get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
+        else:
+            logits_student, probabilities_student, log_probs_student = \
+                get_prediction_student(student_output_layer=regular_embedding,
+                                       num_labels=num_rele_label,
+                                       is_training=is_training)
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
         teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
@@ -1334,6 +1341,39 @@ def get_prediction_student(student_output_layer, num_labels, is_training):
 
         logits = tf.matmul(student_output_layer, output_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
+        probabilities = tf.nn.softmax(logits, axis=-1)
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+
+    return logits, probabilities, log_probs
+
+
+def get_prediction_student_use_resnet(student_embedding, num_labels, is_training):
+    hidden_size = student_embedding.shape[-1].value
+    with tf.variable_scope("cls_student"):
+        output_weights1 = tf.get_variable(
+            "output_weights1", [hidden_size, hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        output_bias1 = tf.get_variable(
+            "output_bias1", [hidden_size], initializer=tf.zeros_initializer())
+
+        if is_training:
+            student_embedding = tf.nn.dropout(student_embedding, keep_prob=0.9)
+
+        layer1 = tf.matmul(student_embedding, output_weights1, transpose_b=True)
+        layer1 = tf.nn.bias_add(layer1, output_bias1)
+        if is_training:
+            layer1 = tf.nn.dropout(layer1, keep_prob=0.9)
+        layer1 = layer1 + student_embedding
+
+        output_weights2 = tf.get_variable(
+            "output_weights2", [num_labels, hidden_size],
+            initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+        output_bias2 = tf.get_variable(
+            "output_bias2", [num_labels], initializer=tf.zeros_initializer())
+        logits = tf.matmul(layer1, output_weights2, transpose_b=True)
+        logits = tf.nn.bias_add(logits, output_bias2)
         probabilities = tf.nn.softmax(logits, axis=-1)
         log_probs = tf.nn.log_softmax(logits, axis=-1)
 
