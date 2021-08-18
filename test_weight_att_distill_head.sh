@@ -30,7 +30,7 @@ python3 sbert_distill.py \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.4 \
   --use_kd_att=true \
-  --kd_weight_att=1.0 \
+  --kd_weight_att=10 \
   --use_all_layer_emb=false \
   --use_resnet_predict=false \
   --use_weighted_att=true \
