@@ -1111,13 +1111,14 @@ def create_model_dipair(bi_layer_num, cross_layer_num, bert_config, is_training,
     combined_att_masks = create_att_mask(combined_input_masks)  # [bs, seq_len, seq_len]
     bs, seq_len, _ = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
+    combined_embeddings = modeling.reshape_to_matrix(combined_embeddings)
 
     with tf.variable_scope("bert_student", reuse=tf.AUTO_REUSE):
         with tf.variable_scope("encoder"):
             with tf.variable_scope("layer_%d" % bi_layer_num):
                 with tf.variable_scope("attention"):
                     with tf.variable_scope("self"):
-                        self_att_output, _, _ = modeling.attention_layer(
+                        self_att_output, _, _, _, _ = modeling.attention_layer(
                             from_tensor=combined_embeddings,
                             to_tensor=combined_embeddings,
                             attention_mask=combined_att_masks,
