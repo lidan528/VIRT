@@ -1024,6 +1024,7 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
     batch_size = input_shape[0]
     seq_length = input_shape[1]
     input_width = input_shape[2]
+    combined_embeddings = modeling.reshape_to_matrix(combined_embeddings)
     # print("seq_len:>>>>>>>>>>", seq_len)
     # input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
 
