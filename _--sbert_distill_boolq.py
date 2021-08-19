@@ -1074,14 +1074,8 @@ def model_fn_builder(bert_config,
                                                     segment_ids= segment_ids_sbert_a,
                                                     use_one_hot_embeddings = use_one_hot_embeddings,
                                                     scope = "bert_student",
-                                                    is_reuse = tf.AUTO_REUSE)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                    input_ids = input_ids_sbert_b,
-                                                    input_mask = input_mask_sbert_b,
-                                                    segment_ids= segment_ids_sbert_b,
-                                                    use_one_hot_embeddings = use_one_hot_embeddings,
-                                                    scope = "bert_student",
-                                                    is_reuse = tf.AUTO_REUSE)
+                                                    is_reuse = tf.AUTO_REUSE,
+                                                    pooling=True)
 
         if FLAGS.model_type == 'poly':
             tf.logging.info("*********** use poly encoder as the model backbone...*******************")
