@@ -1211,6 +1211,7 @@ def model_fn_builder(bert_config,
             regular_embedding = poly_encoder(query_embedding, doc_embedding, input_mask_sbert_b, bert_config)
 
         elif FLAGS.model_type == 'deformer':
+            tf.logging.info("*********** use deformer as the model backbone...*******************")
             regular_embedding, model_stu_query, model_stu_doc = create_model_Deformer(bi_layer_num=11, cross_layer_num=1,
                                                                                       bert_config=bert_config, is_training=is_training,
                                                                                       input_ids_a=input_ids_sbert_a,
@@ -1222,6 +1223,7 @@ def model_fn_builder(bert_config,
                                                                                       use_one_hot_embeddings=use_one_hot_embeddings)
 
         elif FLAGS.model_type == 'dipair':
+            tf.logging.info("*********** use dipair as the model backbone...*******************")
             regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=11,
                                                                                       cross_layer_num=1,
                                                                                       bert_config=bert_config,
@@ -1237,6 +1239,7 @@ def model_fn_builder(bert_config,
                                                                                       first_n=16)
 
         elif FLAGS.model_type == 'col':
+            tf.logging.info("*********** use colbert as the model backbone...*******************")
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                                   input_ids=input_ids_sbert_a,
                                                                   input_mask=input_mask_sbert_a,
@@ -1283,10 +1286,12 @@ def model_fn_builder(bert_config,
                 tf.logging.info("***************use all layer embedding to predict...*****************")
                 regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
             elif FLAGS.model == 'sbert':
+                tf.logging.info("*********** use sbert as the model backbone...*******************")
                 sub_embedding = tf.abs(query_embedding - doc_embedding)
                 max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
                 regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
             elif FLAGS.model == 'bi_encoder':
+                tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
                 regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
 
         if FLAGS.model_type != 'col':
