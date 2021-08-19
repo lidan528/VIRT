@@ -748,7 +748,7 @@ def model_fn_builder(bert_config, num_rele_label, init_checkpoint, learning_rate
         query_embedding = tf.expand_dims(query_embedding, axis=[1])
         poly_mask = input_mask_b[:, :FLAGS.poly_first_m]
         final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=poly_mask)
-        final_vecs = tf.squeeze(final_vecs, axis=[1])
+        final_vecs = tf.squeeze(final_vecs, axis=[1])   # query只有一个（进行了mean pooling）
 
         logits = tf.layers.dense(final_vecs, units=num_rele_label)
         probabilities = tf.nn.softmax(logits, axis=-1)

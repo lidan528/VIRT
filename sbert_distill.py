@@ -224,6 +224,13 @@ flags.DEFINE_bool("use_weighted_att", False, "Whether to use weighted att distil
 
 flags.DEFINE_bool("use_att_head", False, "Whether to use weighted att distill.")
 
+tf.flags.DEFINE_string(
+    "model_type", None,
+    "which model to use"
+    )
+
+tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
+
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
@@ -927,7 +934,7 @@ def create_model_bert(bert_config, is_training, input_ids, input_mask,
 
 
 def create_model_sbert(bert_config, is_training, input_ids, input_mask,
-                       segment_ids, use_one_hot_embeddings, scope, is_reuse):
+                       segment_ids, use_one_hot_embeddings, scope, is_reuse, pooling=False):
     model = modeling.BertModel(
         config=bert_config,
         is_training=is_training,
@@ -939,46 +946,48 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
         is_reuse=is_reuse)
 
     output_layer = None
-
-    if FLAGS.pooling_strategy == "cls":
-        tf.logging.info("use cls embedding")
-        output_layer = model.get_pooled_output()
-
-    elif FLAGS.pooling_strategy == "mean":
-        tf.logging.info("use mean embedding")
-
+    if not pooling:
         output_layer = model.get_sequence_output()
-
-        # delete cls and sep
-        # a = tf.cast(tf.reduce_sum(input_mask, axis=-1) - 1, tf.int32)
-        # last = tf.one_hot(a, depth=FLAGS.max_seq_length)
-
-        # b = tf.zeros([tf.shape(input_ids)[0]], tf.int32)
-        # first = tf.one_hot(b, depth=FLAGS.max_seq_length)
-        # input_mask_sub2 = tf.cast(input_mask, dtype=tf.float32)
-        # input_mask_sub2 = input_mask_sub2 - first - last
-
-        # input_mask3 = tf.cast(tf.reshape(input_mask_sub2, [-1, FLAGS.max_seq_length, 1]), tf.float32)
-        # output_layer = output_layer * input_mask3
-
-        # average pooling
-        # length = tf.reduce_sum(input_mask3, axis=1)
-
-
-        # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
-        mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)     # mask: [bs_size, max_len, 1]
-        masked_output_layer = mask * output_layer       # [bs_size, max_len, emb_dim]
-        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)    # [bs_size, emb_dim]
-        actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
-        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)# [bs_size, 1]
-        output_layer = sum_masked_output_layer / actual_token_nums
-
-        # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
-        # output_layer = token_embedding_sum/length
-        # output_layer = token_embedding_sum / FLAGS.max_seq_length
     else:
-        tf.logging.info("pooling_strategy error")
-        assert 1 == 2
+        if FLAGS.pooling_strategy == "cls":
+            tf.logging.info("use cls embedding")
+            output_layer = model.get_pooled_output()
+
+        elif FLAGS.pooling_strategy == "mean":
+            tf.logging.info("use mean embedding")
+
+            output_layer = model.get_sequence_output()
+
+            # delete cls and sep
+            # a = tf.cast(tf.reduce_sum(input_mask, axis=-1) - 1, tf.int32)
+            # last = tf.one_hot(a, depth=FLAGS.max_seq_length)
+
+            # b = tf.zeros([tf.shape(input_ids)[0]], tf.int32)
+            # first = tf.one_hot(b, depth=FLAGS.max_seq_length)
+            # input_mask_sub2 = tf.cast(input_mask, dtype=tf.float32)
+            # input_mask_sub2 = input_mask_sub2 - first - last
+
+            # input_mask3 = tf.cast(tf.reshape(input_mask_sub2, [-1, FLAGS.max_seq_length, 1]), tf.float32)
+            # output_layer = output_layer * input_mask3
+
+            # average pooling
+            # length = tf.reduce_sum(input_mask3, axis=1)
+
+
+            # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
+            mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)     # mask: [bs_size, max_len, 1]
+            masked_output_layer = mask * output_layer       # [bs_size, max_len, emb_dim]
+            sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)    # [bs_size, emb_dim]
+            actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
+            actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)# [bs_size, 1]
+            output_layer = sum_masked_output_layer / actual_token_nums
+
+            # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
+            # output_layer = token_embedding_sum/length
+            # output_layer = token_embedding_sum / FLAGS.max_seq_length
+        else:
+            tf.logging.info("pooling_strategy error")
+            assert 1 == 2
 
     return output_layer, model
 
@@ -1014,27 +1023,40 @@ def model_fn_builder(bert_config,
             segment_ids_bert_ab = features["segment_ids_bert_ab"]
             label_ids = features["label_ids"]
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                    input_ids = input_ids_sbert_a,
-                                                    input_mask = input_mask_sbert_a,
-                                                    segment_ids= segment_ids_sbert_a,
-                                                    use_one_hot_embeddings = use_one_hot_embeddings,
-                                                    scope = "bert_student",
-                                                    is_reuse = tf.AUTO_REUSE)
+                                                                  input_ids=input_ids_sbert_a,
+                                                                  input_mask=input_mask_sbert_a,
+                                                                  segment_ids=segment_ids_sbert_a,
+                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                  scope="bert_student",
+                                                                  is_reuse=tf.AUTO_REUSE,
+                                                                  pooling=True)
+        if FLAGS.model_type == 'poly':
+            tf.logging.info("*********** use poly encoder as the model backbone...*******************")
             doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                    input_ids = input_ids_sbert_b,
-                                                    input_mask = input_mask_sbert_b,
-                                                    segment_ids= segment_ids_sbert_b,
-                                                    use_one_hot_embeddings = use_one_hot_embeddings,
-                                                    scope = "bert_student",
-                                                    is_reuse = tf.AUTO_REUSE)
-
-        if FLAGS.use_all_layer_emb:
-            tf.logging.info("***************use all layer embedding to predict...*****************")
-            regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
+                                                              input_ids=input_ids_sbert_b,
+                                                              input_mask=input_mask_sbert_b,
+                                                              segment_ids=segment_ids_sbert_b,
+                                                              use_one_hot_embeddings=use_one_hot_embeddings,
+                                                              scope="bert_student",
+                                                              is_reuse=tf.AUTO_REUSE,
+                                                              pooling=False)
+            regular_embedding = poly_encoder(query_embedding, doc_embedding, input_mask_sbert_b, bert_config)
         else:
-            sub_embedding = tf.abs(query_embedding - doc_embedding)
-            max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
-            regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
+            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                              input_ids=input_ids_sbert_b,
+                                                              input_mask=input_mask_sbert_b,
+                                                              segment_ids=segment_ids_sbert_b,
+                                                              use_one_hot_embeddings=use_one_hot_embeddings,
+                                                              scope="bert_student",
+                                                              is_reuse=tf.AUTO_REUSE,
+                                                              pooling=True)
+            if FLAGS.use_all_layer_emb:
+                tf.logging.info("***************use all layer embedding to predict...*****************")
+                regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
+            else:
+                sub_embedding = tf.abs(query_embedding - doc_embedding)
+                max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
+                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
 
         if FLAGS.use_resnet_predict:
             tf.logging.info("*************use resnet in prediction..************************")
@@ -1350,6 +1372,31 @@ def get_prediction_student_use_resnet(student_embedding, num_labels, is_training
 
     return logits, probabilities, log_probs
 
+
+def poly_encoder(query_embedding, doc_embedding, input_mask_b, bert_config):
+    import math
+    def dot_attention(q, k, v, v_mask=None, dropout=None):
+        # v_mask [B, T]
+        attention_scores = tf.matmul(q, k, transpose_b=True)
+        # attention_scores [B, S, T]
+        attention_scores = tf.multiply(attention_scores,
+                                       1.0 / math.sqrt(float(bert_config.hidden_size)))
+        if v_mask is not None:
+            v_mask = tf.expand_dims(v_mask, axis=[1])
+            adder = (1.0 - tf.cast(v_mask, tf.float32)) * -10000.0
+            attention_scores += adder
+
+        attention_probs = tf.nn.softmax(attention_scores)  # [B, S, T]
+        output = tf.matmul(attention_probs, v)
+        return output
+
+    doc_embedding = doc_embedding[:, :FLAGS.poly_first_m, :]
+    query_embedding = tf.expand_dims(query_embedding, axis=[1])
+    poly_mask = input_mask_b[:, :FLAGS.poly_first_m]
+    final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=poly_mask)
+    final_vecs = tf.squeeze(final_vecs, axis=[1])  # query只有一个（进行了mean pooling）
+
+    return final_vecs
 
 
 def create_att_mask(input_mask):
@@ -2314,4 +2361,5 @@ if __name__ == "__main__":
     flags.mark_flag_as_required("use_all_layer_emb")
     flags.mark_flag_as_required("use_resnet_predict")
     flags.mark_flag_as_required("use_weighted_att")
+    flags.mark_flag_as_required("model_type")
     tf.app.run()
