@@ -16,7 +16,7 @@ python sbert_distill.py \
   --data_dir=$MY_DATASET \
   --vocab_file=$BERT_MODEL_DIR/vocab.txt \
   --bert_config_file=$BERT_MODEL_DIR/bert_config.json \
-  --init_checkpoint_teacher=$TEACHER_MODEL_DIR/model.ckpt-43000 \
+  --init_checkpoint_teacher=$TEACHER_MODEL_DIR/model.ckpt-46000 \
   --init_checkpoint_student=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length_bert=259 \
   --max_seq_length_sbert=130 \
