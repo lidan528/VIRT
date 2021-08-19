@@ -231,6 +231,8 @@ tf.flags.DEFINE_string(
 
 tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
 
+flags.DEFINE_integer("colbert_dim", 128, "reduction dimension of colbert")
+
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
@@ -992,6 +994,171 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
     return output_layer, model
 
 
+def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_training,
+                          input_ids_a, input_mask_a, segment_ids_a,
+                          input_ids_b, input_mask_b, segment_ids_b,
+                          use_one_hot_embeddings):
+    import copy
+    bert_config_a = copy.deepcopy(bert_config)
+    bert_config_a.num_hidden_layers = bi_layer_num
+    query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config_a, is_training=is_training,
+                                                          input_ids=input_ids_a,
+                                                          input_mask=input_mask_a,
+                                                          segment_ids=segment_ids_a,
+                                                          use_one_hot_embeddings=use_one_hot_embeddings,
+                                                          scope="bert_student",
+                                                          is_reuse=tf.AUTO_REUSE,
+                                                          pooling=False)
+    doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config_a, is_training=is_training,
+                                                      input_ids=input_ids_b,
+                                                      input_mask=input_mask_b,
+                                                      segment_ids=segment_ids_b,
+                                                      use_one_hot_embeddings=use_one_hot_embeddings,
+                                                      scope="bert_student",
+                                                      is_reuse=tf.AUTO_REUSE,
+                                                      pooling=False)
+    combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)     #[bs, seq_len ,emb_dim]
+    combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
+    combined_att_masks = create_att_mask(combined_input_masks)                    #[bs, seq_len, seq_len]
+    bs, seq_len, _ = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
+    input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
+
+    with tf.variable_scope("bert_student", reuse=tf.AUTO_REUSE):
+        with tf.variable_scope("encoder"):
+            with tf.variable_scope("layer_%d" % bi_layer_num):
+                with tf.variable_scope("attention"):
+                    with tf.variable_scope("self"):
+                        self_att_output, _, _ = modeling.attention_layer(
+                            from_tensor=combined_embeddings,
+                            to_tensor=combined_embeddings,
+                            attention_mask=combined_att_masks,
+                            num_attention_heads=bert_config.num_attention_heads,
+                            size_per_head=int(bert_config.hidden_size / bert_config.num_attention_heads),
+                            attention_probs_dropout_prob=bert_config.attention_probs_dropout_prob,
+                            initializer_range=bert_config.initializer_range,
+                            do_return_2d_tensor=True,
+                            batch_size=bs,
+                            from_seq_length=seq_len,
+                            to_seq_length=seq_len
+                        )
+                    with tf.variable_scope("output"):
+                        attention_output = tf.layers.dense(
+                            self_att_output,
+                            bert_config.hidden_size,
+                            kernel_initializer=modeling.create_initializer(bert_config.initializer_range))
+                        attention_output = modeling.dropout(attention_output, bert_config.hidden_dropout_prob)
+                        attention_output = modeling.layer_norm(
+                            attention_output + combined_embeddings)  # [bs * seq_len, num_heads * head_dim] (2d)
+
+                    # The activation is only applied to the "intermediate" hidden layer.
+                with tf.variable_scope("intermediate"):
+                    intermediate_output = tf.layers.dense(
+                        attention_output,
+                        bert_config.intermediate_size,
+                        activation=modeling.get_activation(bert_config.hidden_act),
+                        kernel_initializer=modeling.create_initializer(
+                            bert_config.initializer_range))  # [bs * seq_len, num_heads * head_dim] (2d)
+
+                # Down-project back to `hidden_size` then add the residual.
+                with tf.variable_scope("output"):
+                    layer_output = tf.layers.dense(
+                        intermediate_output,
+                        bert_config.hidden_size,
+                        kernel_initializer=modeling.create_initializer(bert_config.initializer_range))
+                    layer_output = modeling.dropout(layer_output, bert_config.hidden_dropout_prob)
+                    layer_output = modeling.layer_norm(layer_output + attention_output)
+                    final_output = modeling.reshape_from_matrix(layer_output, input_shape)
+
+    mean_pooled_final_output = get_pooled_embeddings(final_output, combined_input_masks)
+
+    return mean_pooled_final_output, model_stu_query, model_stu_doc
+
+
+def create_model_dipair(bi_layer_num, cross_layer_num, bert_config, is_training,
+                          input_ids_a, input_mask_a, segment_ids_a,
+                          input_ids_b, input_mask_b, segment_ids_b,
+                          use_one_hot_embeddings, first_m, first_n):
+    import copy
+    bert_config_a = copy.deepcopy(bert_config)
+    bert_config_a.num_hidden_layers = bi_layer_num
+    query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config_a, is_training=is_training,
+                                                          input_ids=input_ids_a,
+                                                          input_mask=input_mask_a,
+                                                          segment_ids=segment_ids_a,
+                                                          use_one_hot_embeddings=use_one_hot_embeddings,
+                                                          scope="bert_student",
+                                                          is_reuse=tf.AUTO_REUSE,
+                                                          pooling=False)
+    doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config_a, is_training=is_training,
+                                                      input_ids=input_ids_b,
+                                                      input_mask=input_mask_b,
+                                                      segment_ids=segment_ids_b,
+                                                      use_one_hot_embeddings=use_one_hot_embeddings,
+                                                      scope="bert_student",
+                                                      is_reuse=tf.AUTO_REUSE,
+                                                      pooling=False)
+    query_embedding = query_embedding[:, :first_m, :]
+    doc_embedding = doc_embedding[:, :first_n, :]
+    input_mask_a = input_mask_a[:, :first_m, :]
+    input_mask_b = input_mask_b[:, :first_n, :]
+    combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)  # [bs, seq_len ,emb_dim]
+    combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)  # [bs, seq_len]
+    combined_att_masks = create_att_mask(combined_input_masks)  # [bs, seq_len, seq_len]
+    bs, seq_len, _ = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
+    input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
+
+    with tf.variable_scope("bert_student", reuse=tf.AUTO_REUSE):
+        with tf.variable_scope("encoder"):
+            with tf.variable_scope("layer_%d" % bi_layer_num):
+                with tf.variable_scope("attention"):
+                    with tf.variable_scope("self"):
+                        self_att_output, _, _ = modeling.attention_layer(
+                            from_tensor=combined_embeddings,
+                            to_tensor=combined_embeddings,
+                            attention_mask=combined_att_masks,
+                            num_attention_heads=bert_config.num_attention_heads,
+                            size_per_head=int(bert_config.hidden_size / bert_config.num_attention_heads),
+                            attention_probs_dropout_prob=bert_config.attention_probs_dropout_prob,
+                            initializer_range=bert_config.initializer_range,
+                            do_return_2d_tensor=True,
+                            batch_size=bs,
+                            from_seq_length=seq_len,
+                            to_seq_length=seq_len
+                        )
+                    with tf.variable_scope("output"):
+                        attention_output = tf.layers.dense(
+                            self_att_output,
+                            bert_config.hidden_size,
+                            kernel_initializer=modeling.create_initializer(bert_config.initializer_range))
+                        attention_output = modeling.dropout(attention_output, bert_config.hidden_dropout_prob)
+                        attention_output = modeling.layer_norm(
+                            attention_output + combined_embeddings)  # [bs * seq_len, num_heads * head_dim] (2d)
+
+                    # The activation is only applied to the "intermediate" hidden layer.
+                with tf.variable_scope("intermediate"):
+                    intermediate_output = tf.layers.dense(
+                        attention_output,
+                        bert_config.intermediate_size,
+                        activation=modeling.get_activation(bert_config.hidden_act),
+                        kernel_initializer=modeling.create_initializer(
+                            bert_config.initializer_range))  # [bs * seq_len, num_heads * head_dim] (2d)
+
+                # Down-project back to `hidden_size` then add the residual.
+                with tf.variable_scope("output"):
+                    layer_output = tf.layers.dense(
+                        intermediate_output,
+                        bert_config.hidden_size,
+                        kernel_initializer=modeling.create_initializer(bert_config.initializer_range))
+                    layer_output = modeling.dropout(layer_output, bert_config.hidden_dropout_prob)
+                    layer_output = modeling.layer_norm(layer_output + attention_output)
+                    final_output = modeling.reshape_from_matrix(layer_output, input_shape)
+
+    mean_pooled_final_output = get_pooled_embeddings(final_output, combined_input_masks)
+
+    return mean_pooled_final_output, model_stu_query, model_stu_doc
+
+
+
 def model_fn_builder(bert_config,
                      num_rele_label,
                      init_checkpoint_teacher, init_checkpoint_student,
@@ -1022,6 +1189,9 @@ def model_fn_builder(bert_config,
             input_mask_bert_ab = features["input_mask_bert_ab"]
             segment_ids_bert_ab = features["segment_ids_bert_ab"]
             label_ids = features["label_ids"]
+
+        if FLAGS.model_type == 'poly':
+            tf.logging.info("*********** use poly encoder as the model backbone...*******************")
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                                   input_ids=input_ids_sbert_a,
                                                                   input_mask=input_mask_sbert_a,
@@ -1030,8 +1200,6 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=True)
-        if FLAGS.model_type == 'poly':
-            tf.logging.info("*********** use poly encoder as the model backbone...*******************")
             doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                               input_ids=input_ids_sbert_b,
                                                               input_mask=input_mask_sbert_b,
@@ -1041,7 +1209,68 @@ def model_fn_builder(bert_config,
                                                               is_reuse=tf.AUTO_REUSE,
                                                               pooling=False)
             regular_embedding = poly_encoder(query_embedding, doc_embedding, input_mask_sbert_b, bert_config)
+
+        elif FLAGS.model_type == 'deformer':
+            regular_embedding, model_stu_query, model_stu_doc = create_model_Deformer(bi_layer_num=11, cross_layer_num=1,
+                                                                                      bert_config=bert_config, is_training=is_training,
+                                                                                      input_ids_a=input_ids_sbert_a,
+                                                                                      input_mask_a=input_mask_sbert_a,
+                                                                                      segment_ids_a=segment_ids_sbert_a,
+                                                                                      input_ids_b=input_ids_sbert_b,
+                                                                                      input_mask_b=input_mask_sbert_b,
+                                                                                      segment_ids_b=segment_ids_sbert_b,
+                                                                                      use_one_hot_embeddings=use_one_hot_embeddings)
+
+        elif FLAGS.model_type == 'dipair':
+            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=11,
+                                                                                      cross_layer_num=1,
+                                                                                      bert_config=bert_config,
+                                                                                      is_training=is_training,
+                                                                                      input_ids_a=input_ids_sbert_a,
+                                                                                      input_mask_a=input_mask_sbert_a,
+                                                                                      segment_ids_a=segment_ids_sbert_a,
+                                                                                      input_ids_b=input_ids_sbert_b,
+                                                                                      input_mask_b=input_mask_sbert_b,
+                                                                                      segment_ids_b=segment_ids_sbert_b,
+                                                                                      use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                      first_m=8,
+                                                                                      first_n=16)
+
+        elif FLAGS.model_type == 'col':
+            query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                                  input_ids=input_ids_sbert_a,
+                                                                  input_mask=input_mask_sbert_a,
+                                                                  segment_ids=segment_ids_sbert_a,
+                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                  scope="bert_student",
+                                                                  is_reuse=tf.AUTO_REUSE,
+                                                                  pooling=False)
+            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                              input_ids=input_ids_sbert_b,
+                                                              input_mask=input_mask_sbert_b,
+                                                              segment_ids=segment_ids_sbert_b,
+                                                              use_one_hot_embeddings=use_one_hot_embeddings,
+                                                              scope="bert_student",
+                                                              is_reuse=tf.AUTO_REUSE,
+                                                              pooling=False)
+            logits_student, probabilities_student, log_probs_student = col_bert(query_embedding=query_embedding,
+                                                                                doc_embedding=doc_embedding,
+                                                                                input_mask_a=input_mask_sbert_a,
+                                                                                input_mask_b=input_mask_sbert_b,
+                                                                                num_rele_label=num_rele_label,
+                                                                                bert_config=bert_config)
+
+
+
         else:
+            query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                                  input_ids=input_ids_sbert_a,
+                                                                  input_mask=input_mask_sbert_a,
+                                                                  segment_ids=segment_ids_sbert_a,
+                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                  scope="bert_student",
+                                                                  is_reuse=tf.AUTO_REUSE,
+                                                                  pooling=True)
             doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                               input_ids=input_ids_sbert_b,
                                                               input_mask=input_mask_sbert_b,
@@ -1053,20 +1282,23 @@ def model_fn_builder(bert_config,
             if FLAGS.use_all_layer_emb:
                 tf.logging.info("***************use all layer embedding to predict...*****************")
                 regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
-            else:
+            elif FLAGS.model == 'sbert':
                 sub_embedding = tf.abs(query_embedding - doc_embedding)
                 max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
                 regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
+            elif FLAGS.model == 'bi_encoder':
+                regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
 
-        if FLAGS.use_resnet_predict:
-            tf.logging.info("*************use resnet in prediction..************************")
-            logits_student, probabilities_student, log_probs_student = \
-            get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
-        else:
-            logits_student, probabilities_student, log_probs_student = \
-                get_prediction_student(student_output_layer=regular_embedding,
-                                       num_labels=num_rele_label,
-                                       is_training=is_training)
+        if FLAGS.model_type != 'col':
+            if FLAGS.use_resnet_predict:
+                tf.logging.info("*************use resnet in prediction..************************")
+                logits_student, probabilities_student, log_probs_student = \
+                get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
+            else:
+                logits_student, probabilities_student, log_probs_student = \
+                    get_prediction_student(student_output_layer=regular_embedding,
+                                           num_labels=num_rele_label,
+                                           is_training=is_training)
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
         teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
@@ -1397,6 +1629,56 @@ def poly_encoder(query_embedding, doc_embedding, input_mask_b, bert_config):
     final_vecs = tf.squeeze(final_vecs, axis=[1])  # query只有一个（进行了mean pooling）
 
     return final_vecs
+
+
+def col_bert(query_embedding, doc_embedding, input_mask_a, input_mask_b,  num_rele_label, bert_config):
+    import math
+    def max_attention_score(q, k):
+        # q [B, S, num_label, H], v [B, T, num_label, H]
+        q = tf.transpose(q, perm=[0, 2, 1, 3])
+        k = tf.transpose(k, perm=[0, 2, 1, 3])
+        print(modeling.get_shape_list(q))
+        attention_scores = tf.matmul(q, k, transpose_b=True)
+        # attention_scores [B, num_label, S, T]
+        attention_scores = tf.multiply(attention_scores,
+                                       1.0 / math.sqrt(float(bert_config.hidden_size)))
+        attention_scores = tf.reduce_sum(tf.reduce_max(attention_scores, axis=-1), axis=-1)
+        print(modeling.get_shape_list(attention_scores))
+        return attention_scores
+
+    query_embedding = tf.layers.dense(query_embedding, units=FLAGS.colbert_dim)
+    doc_embedding = tf.layers.dense(doc_embedding, units=FLAGS.colbert_dim)
+    B, S, H = modeling.get_shape_list(query_embedding)
+    _, T, H = modeling.get_shape_list(doc_embedding)
+
+    transform_weights = tf.get_variable(
+        "output_weights", [num_rele_label * FLAGS.colbert_dim, FLAGS.colbert_dim],
+        initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+    query_embedding = tf.reshape(tf.matmul(query_embedding, transform_weights, transpose_b=True),
+                                 [B, S, num_rele_label, H])
+    doc_embedding = tf.reshape(tf.matmul(doc_embedding, transform_weights, transpose_b=True), [B, T, num_rele_label, H])
+
+    query_embedding, _ = tf.linalg.normalize(query_embedding, ord=2, axis=-1)
+    doc_embedding, _ = tf.linalg.normalize(doc_embedding, ord=2, axis=-1)
+
+    query_mask = tf.expand_dims(input_mask_a, axis=-1)
+    query_mask = tf.expand_dims(query_mask, axis=-1)
+    query_mask = tf.tile(query_mask, tf.constant([1, 1, num_rele_label, FLAGS.colbert_dim]))
+    query_mask = tf.cast(query_mask, dtype=tf.float32)
+    query_embedding = tf.multiply(query_mask, query_embedding)
+
+    doc_mask = tf.expand_dims(input_mask_b, axis=-1)
+    doc_mask = tf.expand_dims(doc_mask, axis=-1)
+    doc_mask = tf.tile(doc_mask, tf.constant([1, 1, num_rele_label, FLAGS.colbert_dim]))
+    doc_embedding = tf.multiply(tf.cast(doc_mask, dtype=tf.float32), doc_embedding)
+
+    logits = max_attention_score(query_embedding, doc_embedding)
+
+    probabilities = tf.nn.softmax(logits, axis=-1)
+    log_probs = tf.nn.log_softmax(logits, axis=-1)
+
+    return logits, probabilities, log_probs
 
 
 def create_att_mask(input_mask):
