@@ -1021,6 +1021,7 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
     combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
     combined_att_masks = create_att_mask(combined_input_masks)                    #[bs, seq_len, seq_len]
     bs, seq_len, dim = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
+    print("seq_len:>>>>>>>>>>", seq_len)
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
 
     with tf.variable_scope("bert_student", reuse=tf.AUTO_REUSE):
