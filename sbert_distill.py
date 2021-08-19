@@ -1020,16 +1020,19 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
     combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)     #[bs, seq_len ,emb_dim]
     combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
     combined_att_masks = create_att_mask(combined_input_masks)                    #[bs, seq_len, seq_len]
-    bs, seq_len, dim = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
-    print("seq_len:>>>>>>>>>>", seq_len)
-    input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
+    input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
+    batch_size = input_shape[0]
+    seq_length = input_shape[1]
+    input_width = input_shape[2]
+    # print("seq_len:>>>>>>>>>>", seq_len)
+    # input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
 
     with tf.variable_scope("bert_student", reuse=tf.AUTO_REUSE):
         with tf.variable_scope("encoder"):
             with tf.variable_scope("layer_%d" % bi_layer_num):
                 with tf.variable_scope("attention"):
                     with tf.variable_scope("self"):
-                        self_att_output, _, _ = modeling.attention_layer(
+                        self_att_output, _, _, _, _ = modeling.attention_layer(
                             from_tensor=combined_embeddings,
                             to_tensor=combined_embeddings,
                             attention_mask=combined_att_masks,
@@ -1038,9 +1041,9 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
                             attention_probs_dropout_prob=bert_config.attention_probs_dropout_prob,
                             initializer_range=bert_config.initializer_range,
                             do_return_2d_tensor=True,
-                            batch_size=bs,
-                            from_seq_length=seq_len,
-                            to_seq_length=seq_len
+                            batch_size=batch_size,
+                            from_seq_length=seq_length,
+                            to_seq_length=seq_length
                         )
                     with tf.variable_scope("output"):
                         attention_output = tf.layers.dense(
