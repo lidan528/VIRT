@@ -1772,7 +1772,7 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     doc2query_scores = doc2query_att + adder2
     doc2query_probs = tf.nn.softmax(doc2query_scores)       # [bs, doc_len, query_len]
     weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)   # [bs,  doc_len, emb]
-    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=2)
+    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
 
     sub_embedding = tf.abs(embedding1 - embedding2)
     max_embedding = tf.square(tf.reduce_max([embedding1, embedding2], axis=0))
