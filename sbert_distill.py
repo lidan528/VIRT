@@ -1269,7 +1269,25 @@ def model_fn_builder(bert_config,
                                                                                 num_rele_label=num_rele_label,
                                                                                 bert_config=bert_config)
 
-
+        elif FLAGS.model_type == 'late_fusion':
+            tf.logging.info("*********** use late fusion as the model backbone...*******************")
+            query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                                  input_ids=input_ids_sbert_a,
+                                                                  input_mask=input_mask_sbert_a,
+                                                                  segment_ids=segment_ids_sbert_a,
+                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                  scope="bert_student",
+                                                                  is_reuse=tf.AUTO_REUSE,
+                                                                  pooling=False)
+            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
+                                                              input_ids=input_ids_sbert_b,
+                                                              input_mask=input_mask_sbert_b,
+                                                              segment_ids=segment_ids_sbert_b,
+                                                              use_one_hot_embeddings=use_one_hot_embeddings,
+                                                              scope="bert_student",
+                                                              is_reuse=tf.AUTO_REUSE,
+                                                              pooling=False)
+            regular_embedding = newly_late_interaction(query_embedding, input_mask_sbert_a, doc_embedding, input_mask_sbert_b)
 
         else:
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
@@ -1709,6 +1727,58 @@ def create_att_mask(input_mask):
     mask = broadcast_ones * mask
     return mask
 
+
+def create_att_mask_for2(input_mask_1, input_mask_2):
+  """
+  相当于将input_mask列表复制seq_len次
+  得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
+  从而防止input_mask为0的元素被att，但它可以att to别的元素
+  如果输入的是mask_doc，那么就要复制query_length次，形成[query_length , mask_doc]的mask
+  """
+  from_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)  # [batch-size, seq_len]
+  batch_size = from_shape[0]
+  seq_length_self = from_shape[1]
+  to_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)
+  seq_length_another = to_shape[1]
+  mask = tf.cast(
+    tf.reshape(input_mask_2, [batch_size, 1, seq_length_another]), tf.float32)
+  broadcast_ones = tf.ones(
+    shape=[batch_size, seq_length_self, 1], dtype=tf.float32)
+
+  mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
+  return mask
+
+
+
+def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mask):
+    # query_embeddings: [bs, query_len, emb]
+    # doc_embeddings: [bs, doc_len, emb]
+    emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
+    query2doc_att = tf.matmul(query_embeddings, doc_embeddings, transpose_b=True)   # [bs, query_len, doc_len]
+    query2doc_att = tf.multiply(query2doc_att,
+                                   1.0 / math.sqrt(float(emb_dim)))
+    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)         # [bs, query_len, doc_len]
+    adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
+    query2doc_scores = query2doc_att + adder1
+    query2doc_probs = tf.nn.softmax(query2doc_scores)       # [bs, query_len, doc_len]
+    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)     # [bs,  query_len, emb]
+    embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+
+    doc2query_att = tf.matmul(doc_embeddings, query_embeddings, transpose_b=True)
+    doc2query_att = tf.multiply(doc2query_att,
+                                1.0 / math.sqrt(float(emb_dim)))
+    doc2query_mask = create_att_mask_for2(doc_mask, query_mask)
+    adder2 = (1.0 - tf.cast(doc2query_mask, tf.float32)) * -10000.0
+    doc2query_scores = doc2query_att + adder2
+    doc2query_probs = tf.nn.softmax(doc2query_scores)       # [bs, doc_len, query_len]
+    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)   # [bs,  doc_len, emb]
+    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=2)
+
+    sub_embedding = tf.abs(embedding1 - embedding2)
+    max_embedding = tf.square(tf.reduce_max([embedding1, embedding2], axis=0))
+    regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, max_embedding], -1)
+
+    return regular_embedding
 
 
 def get_attention_loss(model_student_query, model_student_doc, model_teacher,
