@@ -1104,8 +1104,8 @@ def create_model_dipair(bi_layer_num, cross_layer_num, bert_config, is_training,
                                                       pooling=False)
     query_embedding = query_embedding[:, :first_m, :]
     doc_embedding = doc_embedding[:, :first_n, :]
-    input_mask_a = input_mask_a[:, :first_m, :]
-    input_mask_b = input_mask_b[:, :first_n, :]
+    input_mask_a = input_mask_a[:, :first_m]
+    input_mask_b = input_mask_b[:, :first_n]
     combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)  # [bs, seq_len ,emb_dim]
     combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)  # [bs, seq_len]
     combined_att_masks = create_att_mask(combined_input_masks)  # [bs, seq_len, seq_len]
