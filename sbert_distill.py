@@ -1309,12 +1309,12 @@ def model_fn_builder(bert_config,
             if FLAGS.use_all_layer_emb:
                 tf.logging.info("***************use all layer embedding to predict...*****************")
                 regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
-            elif FLAGS.model == 'sbert':
+            elif FLAGS.model_type == 'sbert':
                 tf.logging.info("*********** use sbert as the model backbone...*******************")
                 sub_embedding = tf.abs(query_embedding - doc_embedding)
                 max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
                 regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
-            elif FLAGS.model == 'bi_encoder':
+            elif FLAGS.model_type == 'bi_encoder':
                 tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
                 regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
 
