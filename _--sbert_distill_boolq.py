@@ -221,7 +221,7 @@ flags.DEFINE_bool("use_resnet_predict", False, "Whether to use resnet in predict
 flags.DEFINE_integer("poly_first_m", 64, "number of tokens to ue in poly-encoder.")
 
 tf.flags.DEFINE_string(
-    "model_type", "late_fusion",
+    "model_type", None,
     "which model to use"
     )
 
