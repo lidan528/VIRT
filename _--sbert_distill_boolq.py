@@ -1358,11 +1358,7 @@ def model_fn_builder(bert_config,
                                                               scope="bert_student",
                                                               is_reuse=tf.AUTO_REUSE,
                                                               pooling=True)
-            if FLAGS.use_all_layer_emb:
-                tf.logging.info("***************cannot use all layer embedding to predict...*****************")
-                # regular_embedding = use_all_layer_embedding(model_stu_query, model_stu_doc, input_mask_sbert_a, input_mask_sbert_b)
-                assert 1 == 2
-            elif FLAGS.model_type == 'sbert':
+            if FLAGS.model_type == 'sbert':
                 tf.logging.info("*********** use sbert as the model backbone...*******************")
                 sub_embedding = tf.abs(query_embedding - doc_embedding)
                 max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
