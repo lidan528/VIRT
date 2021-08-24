@@ -224,7 +224,7 @@ tf.flags.DEFINE_string(
     "which model to use"
     )
 
-tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
+# tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
 
 flags.DEFINE_integer("colbert_dim", 128, "reduction dimension of colbert")
 
