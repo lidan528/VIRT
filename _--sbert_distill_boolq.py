@@ -1070,7 +1070,7 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
                                                       pooling=False)
     combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)     #[bs, seq_len ,emb_dim]
     combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
-    combined_att_masks = create_att_mask(combined_input_masks)                    #[bs, seq_len, seq_len]
+    combined_att_masks = create_att_mask_for1(combined_input_masks)                    #[bs, seq_len, seq_len]
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
     batch_size = input_shape[0]
     seq_length = input_shape[1]
@@ -1159,7 +1159,7 @@ def create_model_dipair(bi_layer_num, cross_layer_num, bert_config, is_training,
     input_mask_b = input_mask_b[:, :first_n]
     combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)  # [bs, seq_len ,emb_dim]
     combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)  # [bs, seq_len]
-    combined_att_masks = create_att_mask(combined_input_masks)  # [bs, seq_len, seq_len]
+    combined_att_masks = create_att_mask_for1(combined_input_masks)  # [bs, seq_len, seq_len]
     bs, seq_len, _ = modeling.get_shape_list(combined_embeddings, expected_rank=[3])
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
     combined_embeddings = modeling.reshape_to_matrix(combined_embeddings)
@@ -1818,6 +1818,23 @@ def create_att_mask(input_mask, seq_length_another):
   mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
   return mask
 
+
+def create_att_mask_for1(input_mask):
+    """
+    相当于将input_mask列表复制seq_len次
+    得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
+    从而防止input_mask为0的元素被att，但它可以att to别的元素
+    """
+    to_shape = modeling.get_shape_list(input_mask, expected_rank=2)     #[batch-size, seq_len]
+    batch_size = to_shape[0]
+    seq_length = to_shape[1]
+    mask = tf.cast(
+        tf.reshape(input_mask, [batch_size, 1, seq_length]), tf.float32)
+    broadcast_ones = tf.ones(
+        shape=[batch_size, seq_length, 1], dtype=tf.float32)
+
+    mask = broadcast_ones * mask
+    return mask
 
 
 def get_attention_loss(model_student_query, model_student_doc, model_teacher,
