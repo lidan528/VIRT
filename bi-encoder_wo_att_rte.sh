@@ -16,7 +16,7 @@ python _--sbert_distill_boolq.py \
   --data_dir=$MY_DATASET \
   --vocab_file=$BERT_MODEL_DIR/vocab.txt \
   --bert_config_file=$BERT_MODEL_DIR/bert_config.json \
-  --init_checkpoint_teacher=$TEACHER_MODEL_DIR/model.ckpt-4020 \     ******* need change
+  --init_checkpoint_teacher=$TEACHER_MODEL_DIR/model.ckpt-2000 \
   --init_checkpoint_student=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length_query=64 \
   --max_seq_length_doc=328 \
@@ -29,7 +29,7 @@ python _--sbert_distill_boolq.py \
   --use_kd_logit_kl=false \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.4 \
-  --use_kd_att=true \
+  --use_kd_att=false \
   --kd_weight_att=700 \
   --use_resnet_predict=false \
   --model_type=bi_encoder
