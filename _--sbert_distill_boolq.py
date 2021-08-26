@@ -620,6 +620,61 @@ class BoolqProcessor(DataProcessor):
     return examples
 
 
+class RTEProcessor(DataProcessor):
+  """Processor for the MultiNLI data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+      """See base class."""
+      return self._create_examples(
+          self._read_jsnl(os.path.join(data_dir, "train.jsonl")), "train")
+
+  def get_dev_examples(self, data_dir):
+      """See base class."""
+      return self._create_examples(
+          self._read_jsnl(os.path.join(data_dir, "val.jsonl")),
+          "dev")
+
+  def get_test_examples(self, data_dir):
+      """See base class."""
+      return self._create_examples(
+          self._read_jsnl(os.path.join(data_dir, "test.jsonl")), "test")
+
+  def get_labels(self):
+      """See base class."""
+      # return ["contradiction", "entailment", "neutral"]
+      return ["not_entailment", "entailment"]
+
+  def _read_jsnl(self, jsn_file):
+      lines = []
+      with open(jsn_file, 'r', encoding='utf-8') as fp:
+          for line in fp:
+              line = line.strip()
+              if line:
+                  line = json.loads(line)
+                  lines.append(line)
+      return lines
+
+  def _create_examples(self, lines, set_type):
+      """Creates examples for the training and dev sets."""
+      examples = []
+      for (i, line) in enumerate(lines):
+          # if i == 0:
+          #   continue
+          guid = "%s-%s" % (set_type, i)
+          text_a = tokenization.convert_to_unicode(line['hypothesis'])
+          text_b = tokenization.convert_to_unicode(line['premise'])
+          # if set_type == "test":
+          #  label = "contradiction"
+          # else:
+          # label = tokenization.convert_to_unicode(line['label']['cls'])
+          label = line['label']
+          # if label == tokenization.convert_to_unicode("contradictory"):
+          #   label = tokenization.convert_to_unicode("contradiction")
+          examples.append(
+              InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+      return examples
+
+
 def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_query, max_seq_length_doc,
                            tokenizer):
     """
@@ -2149,7 +2204,8 @@ def main(_):
         "lcqmc": LcqmcProcessor,
         "mnli": MnliProcessor,
         "qqp": QqpProcessor,
-        "boolq": BoolqProcessor
+        "boolq": BoolqProcessor,
+        "rte": RTEProcessor,
     }
 
     if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_save:
