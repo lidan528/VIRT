@@ -76,7 +76,7 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
                    len(negative_doc_masks[i]) == max_doc_length
 
         features = collections.OrderedDict()
-        features["query_guid"] = create_int_feature([instance.qid])
+        features["query_guid"] = create_int_feature([int(instance.qid)])
         features["query_ids"] = create_int_feature(query_ids)
         features["query_segment_ids"] = create_int_feature(query_segment_ids)
         features["query_masks"] = create_int_feature(query_masks)
