@@ -31,8 +31,8 @@ def init_flags():
                         help="Whether to lower case the input text. "
                              "Should be True for uncased models and False for cased models.")
 
-    parser.add_argument("--max_doc_length", type=int, default=128, help="Maximum input sequence length.")
-    parser.add_argument("--num_features", type=int, default=3, help="feature number.")
+    parser.add_argument("--max_doc_length", type=int, default=512, help="Maximum input sequence length.")
+    parser.add_argument("--max_query_length", type=int, default=128, help="Maximum input sequence length.")
 
     return parser
 
