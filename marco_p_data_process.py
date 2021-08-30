@@ -23,7 +23,6 @@ def init_flags():
 
     parser.add_argument("--doc_data", type=str, help="Document data file.")
     parser.add_argument("--query_data", type=str, help="Query data file.")
-    parser.add_argument("--train_data", type=str, help="train data map qid to positive doc id and negative doc.")
 
     parser.add_argument("--vocab_file", type=str, help="The vocabulary file that the BERT model was trained on.")
 
@@ -498,7 +497,7 @@ def process(FLAGS, tokenizer):
 
         doc_data = read_doc_data(FLAGS.doc_data)
         query_data = read_query_data(FLAGS.query_data)
-        train_data = _data_generate(doc_data, query_data, id_file=FLAGS.train_data)
+        train_data = _data_generate(doc_data, query_data, id_file=input_file)
 
         examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
 
