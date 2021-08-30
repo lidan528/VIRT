@@ -57,7 +57,7 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
         positive_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
         negative_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
         positive_segment_ids = instance.positive_doc_segment_ids
-        negative_segment_ids = instance.negative_segment_ids
+        negative_segment_ids = instance.negative_doc_segment_ids
         positive_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
         negative_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
         for i, pd in enumerate(positive_doc_ids):
