@@ -187,6 +187,7 @@ def _data_generate(doc_data, query_data, id_file):
             break
         line_no += 1
         qid, pid, nids = line.strip().split('\t')
+        nids = nids.split(',')
         train_data.append({
             "qid": qid,
             "query": query_data[qid],
