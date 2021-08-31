@@ -226,7 +226,7 @@ flags.DEFINE_integer("poly_first_m", 64, "number of tokens to ue in poly-encoder
 
 flags.DEFINE_integer("num_negatives", 4, "number of negative samples.")
 
-flags.DEFINE_integer("train_steps", 5000000, "number of train steps.")
+flags.DEFINE_integer("num_train_steps", 5000000, "number of train steps.")
 
 
 tf.flags.DEFINE_string(

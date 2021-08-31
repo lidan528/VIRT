@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0
 #export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
@@ -18,7 +18,7 @@ python marco_distill.py \
   --max_seq_length_query=64 \
   --max_seq_length_doc=448 \
   --train_batch_size=4 \
-  --train_steps=200000 \
+  --num_train_steps=200000 \
   --num_negatives=4 \
   --learning_rate=5e-5 \
   --do_save=false \
