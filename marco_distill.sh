@@ -25,6 +25,7 @@ python marco_distill.py \
   --do_save=false \
   --output_dir=$OUTPUT \
   --use_kd_logit_kl=true \
+  --use_in_batch_neg=false \
   --use_kd_logit_mse=false \
   --kd_weight_logit=0.4 \
   --use_kd_att=true \
