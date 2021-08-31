@@ -20,6 +20,7 @@ python marco_distill.py \
   --train_batch_size=4 \
   --num_train_steps=200000 \
   --num_negatives=4 \
+  --model_type=bi_encoder \
   --learning_rate=5e-5 \
   --do_save=false \
   --output_dir=$OUTPUT \
