@@ -222,6 +222,9 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_bool("use_resnet_predict", False, "Whether to use resnet in predict.")
+
+flags.DEFINE_bool("use_in_batch_neg", False, "Whether use in-batch negatives.")
+
 flags.DEFINE_integer("poly_first_m", 64, "number of tokens to ue in poly-encoder.")
 
 flags.DEFINE_integer("num_negatives", 4, "number of negative samples.")
