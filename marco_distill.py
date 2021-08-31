@@ -845,9 +845,9 @@ def model_fn_builder(bert_config,
             input_mask_sbert_a = tf.tile(query_masks, tf.constant([1, num_docs]))
             input_mask_sbert_a = tf.reshape(input_mask_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
 
-            cross_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_b[1:]], axis=1)
-            cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[1:]], axis=1)
-            cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[1:]], axis=1)
+            cross_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_b[:, 1:]], axis=1)
+            cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
+            cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
 
             label_ids = tf.zeros([num_docs], tf.int32)
             label_ids[0] = 1
