@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=0
 #export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
 export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/tanghongyin/workspace/distill/msmarco/models
-export MY_DATASET=viewfs://hadoop-meituan/user/hadoop-aipnlp/tanghongyin/msmarco/data/passage #全局变量 数据集所在地址
+export MY_DATASET=viewfs://hadoop-meituan/user/hadoop-aipnlp/tanghongyin/msmarco/data/passage/train_tfr/tfrecord_train.* #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/marco_passage/
 python marco_distill.py \
