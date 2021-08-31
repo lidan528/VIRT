@@ -849,10 +849,8 @@ def model_fn_builder(bert_config,
             cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
             cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
 
-            label_ids = tf.zeros([num_docs], tf.int32)
-            label_ids[0] = 1
+            label_ids = tf.constant([1] + [0]*FLAGS.num_negatives, dtype=tf.int32)
             label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
-
 
         if FLAGS.model_type == 'poly':
             tf.logging.info("*********** use poly encoder as the model backbone...*******************")
