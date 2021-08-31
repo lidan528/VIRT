@@ -88,6 +88,8 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
         negative_doc_ids = negative_doc_ids[:4]
         negative_segment_ids = negative_segment_ids[:4]
         negative_doc_masks = negative_doc_masks[:4]
+        assert len(negative_doc_ids) == len(negative_segment_ids) == len(negative_doc_masks) == 4, \
+            print(len(negative_doc_ids), len(negative_segment_ids), len(negative_doc_masks))
 
         for pidx, positive_doc in enumerate(positive_doc_ids):
             features["positive_doc_ids"] = create_int_feature(positive_doc_ids[pidx])
