@@ -56,8 +56,8 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
             query_masks.append(0)
         positive_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
         negative_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
-        positive_segment_ids = instance.positive_doc_segment_ids
-        negative_segment_ids = instance.negative_doc_segment_ids
+        positive_segment_ids = list(instance.positive_doc_segment_ids)
+        negative_segment_ids = list(instance.negative_doc_segment_ids)
         positive_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
         negative_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
         for i, pd in enumerate(positive_doc_ids):
@@ -235,8 +235,8 @@ def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
         negative_doc_inputs = [build_bert_input(doc_tokens, max_seq_length=max_doc_length, is_doc=True)
                                for doc_tokens in negative_doc_tokens]
         query_tokens, query_segment_ids = query_inputs
-        positive_doc_tokens, positive_doc_segment_ids = zip(*positive_doc_inputs)
-        negative_doc_tokens, negative_doc_segment_ids = zip(*negative_doc_inputs)
+        positive_doc_tokens, positive_doc_segment_ids = list(zip(*positive_doc_inputs))
+        negative_doc_tokens, negative_doc_segment_ids = list(zip(*negative_doc_inputs))
         yield DocExample(qid=qid, query_tokens=query_tokens, query_segment_ids=query_segment_ids,
                          positive_doc_tokens=positive_doc_tokens, positive_doc_segment_ids=positive_doc_segment_ids,
                          negative_doc_tokens=negative_doc_tokens, negative_doc_segment_ids=negative_doc_segment_ids)
