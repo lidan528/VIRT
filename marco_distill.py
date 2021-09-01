@@ -1680,6 +1680,7 @@ def in_batch_negative_loss(query_embedding, doc_embedding, label_ids, num_docs):
     # [bs, bs*num_docs]
     scores_in_batch = tf.matmul(query_embedding_in_batch, doc_embedding, transpose_b=True)
     # in-batch label_ids [bs, bs*num_docs]
+    label_ids = tf.cast(label_ids, dtype=tf.float32)
     label_ids_in_batch = tf.eye(FLAGS.train_batch_size * num_docs) * tf.expand_dims(label_ids, axis=0)  # [bs*num_docs, bs*num_docs]
     label_ids_in_batch = label_ids_in_batch[::num_docs]  # [bs, bs*num_docs]
     scores_in_batch = tf.nn.softmax(scores_in_batch, axis=1)  # [bs]
