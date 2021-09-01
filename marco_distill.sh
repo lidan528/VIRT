@@ -17,7 +17,7 @@ python marco_distill.py \
   --init_checkpoint_student=$BERT_MODEL_DIR/bert_model.ckpt \
   --max_seq_length_query=64 \
   --max_seq_length_doc=448 \
-  --train_batch_size=4 \
+  --train_batch_size=2 \
   --num_train_steps=200000 \
   --num_negatives=4 \
   --model_type=bi_encoder \
