@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/tanghongyin/workspace/distill/msmarco/models
 export MY_DATASET=viewfs://hadoop-meituan/user/hadoop-aipnlp/tanghongyin/msmarco/data/passage/train_tfr/tfrecord_train.* #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/tanghongyin/workspace/distill/output/marco_passage/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/tanghongyin/workspace/distill/output/marco_passage_no_kd_att/
 python marco_distill.py \
   --pooling_strategy=mean \
   --do_train=true \
