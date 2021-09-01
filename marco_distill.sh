@@ -19,6 +19,7 @@ python marco_distill.py \
   --max_seq_length_doc=448 \
   --train_batch_size=4 \
   --num_train_steps=200000 \
+  --save_checkpoints_steps=5000 \
   --num_negatives=4 \
   --model_type=bi_encoder \
   --learning_rate=5e-5 \
