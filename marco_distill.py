@@ -1155,6 +1155,7 @@ def model_fn_builder(bert_config,
                 train_op=train_op,
                 training_hooks=[logging_hook],
                 scaffold_fn=None)
+            output_spec._replace(training_hooks=[logging_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
 
             def metric_fn(per_example_loss, label_ids, probabilities, probabilities_teacher):
