@@ -856,7 +856,7 @@ def model_fn_builder(bert_config,
             label_ids = tf.constant([1] + [0]*FLAGS.num_negatives, dtype=tf.int32)
             label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
 
-            label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
+            # label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
 
         if FLAGS.model_type == 'poly':
             tf.logging.info("*********** use poly encoder as the model backbone...*******************")
@@ -1021,7 +1021,7 @@ def model_fn_builder(bert_config,
             tf.logging.info('*****use regular loss...')
             one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
             per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-            per_example_loss_stu = per_example_loss_stu * label_mask
+            # per_example_loss_stu = per_example_loss_stu * label_mask
             regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
             tf.summary.scalar("regular_loss", regular_loss_stu)
             total_loss = regular_loss_stu
@@ -1037,7 +1037,7 @@ def model_fn_builder(bert_config,
             t_value_distribution = tf.distributions.Categorical(probs=probabilities_teacher + 1e-5)
             s_value_distribution = tf.distributions.Categorical(probs=probabilities_student + 1e-5)
             per_example_loss_kl = tf.distributions.kl_divergence(t_value_distribution, s_value_distribution)
-            per_example_loss_kl = per_example_loss_kl * label_mask
+            # per_example_loss_kl = per_example_loss_kl * label_mask
             distill_loss_logit_kl = tf.reduce_mean(per_example_loss_kl)
             scaled_logit_loss = FLAGS.kd_weight_logit * distill_loss_logit_kl
             total_loss = regular_loss_stu + scaled_logit_loss
@@ -1153,7 +1153,6 @@ def model_fn_builder(bert_config,
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                training_hooks=[logging_hook],
                 scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
