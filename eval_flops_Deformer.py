@@ -1041,8 +1041,8 @@ def main(_):
             "was only trained up to sequence length %d" %
             (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
-    # metric_flops(bert_config)
-    metric_latency(bert_config, 100)
+    metric_flops(bert_config)
+    # metric_latency(bert_config, 100)
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("task_name")
