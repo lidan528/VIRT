@@ -91,7 +91,7 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
         while len(negative_doc_ids) < 4:
             negative_doc_ids.append([0] * max_doc_length)
             negative_segment_ids.append([0] * max_doc_length)
-            negative_doc_masks.append([0] * (max_doc_length))
+            negative_doc_masks.append([1] + [0] * (max_doc_length-1))
         assert len(negative_doc_ids) == len(negative_segment_ids) == len(negative_doc_masks) == 4, \
             print(len(negative_doc_ids), len(negative_segment_ids), len(negative_doc_masks))
 
