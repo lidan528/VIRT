@@ -18,6 +18,9 @@ import random
 
 import sys
 
+import numpy
+numpy.set_printoptions(threshold=sys.maxsize)
+
 # reload(sys)
 # sys.setdefaultencoding('utf-8')
 
