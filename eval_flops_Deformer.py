@@ -836,7 +836,7 @@ def create_model_metric_mnli(bert_config, input_ids_a_ph, input_masks_a_ph, cach
         use_one_hot_embeddings=FLAGS.use_tpu)
 
     output_layer_a = model.get_sequence_output()
-    concated_emb_ab = tf.concat([output_layer_a, cached_emb_b], axis=1)
+    concated_emb_ab = tf.concat([output_layer_a, cached_emb_b], axis=1)[:, :24, :]
     output_layer = modeling.transformer_model(input_tensor=concated_emb_ab, num_hidden_layers=top_transformer_layers, do_return_all_layers=True)[0][0]
     # [bs, seq_length, emb_dim]
 
