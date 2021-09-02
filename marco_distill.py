@@ -1501,15 +1501,13 @@ def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, labe
     emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
     att = tf.einsum('bih,ajh->baij', query_embeddings, doc_embeddings)  # [bs, bs*num_docs, query_len, doc_len]
     att = tf.multiply(att, 1.0 / math.sqrt(float(emb_dim)))
-    tf.logging.info(modeling.get_shape_list(att))
 
     query2doc_mask = create_att_mask_4d(query_mask, doc_mask)  # [bs, bs*num_docs, query_len, doc_len]
     adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
     query2doc_scores = att + adder1
-    tf.logging.info(modeling.get_shape_list(query2doc_scores))
 
     query2doc_probs = tf.nn.softmax(query2doc_scores, axis=-1)  # [bs, bs*num_docs, query_len, doc_len]
-    weighted_doc_embedding = tf.einsum('baij,bjh->baih', query2doc_probs,
+    weighted_doc_embedding = tf.einsum('baij,ajh->baih', query2doc_probs,
                                        doc_embeddings)  # [bs, bs*num_docs, query_len, emb]
     embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=2)  # [bs, bs*num_docs, emb]
 
