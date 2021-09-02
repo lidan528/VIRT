@@ -1144,15 +1144,16 @@ def model_fn_builder(bert_config,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            # logging_hook = tf.train.LoggingTensorHook(
-            #     {"loss": per_example_loss_stu,
-            #      "input_ids_sbert_b": input_ids_sbert_b},
-            #     every_n_iter=1
-            # )
+            logging_hook = tf.train.LoggingTensorHook(
+                {"loss": per_example_loss_stu,
+                 "probabilities_student": probabilities_student},
+                every_n_iter=1
+            )
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
+                training_hooks=[logging_hook],
                 scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
