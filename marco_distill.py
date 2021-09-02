@@ -1018,10 +1018,10 @@ def model_fn_builder(bert_config,
         # in-batch negative loss....
         if FLAGS.use_in_batch_neg:
             tf.logging.info('*****use in batch negatives loss...')
-            loss_in_batch = in_batch_negative_loss(query_embedding=query_embedding,
-                                                   doc_embedding=doc_embedding,
-                                                   label_ids=label_ids,
-                                                   num_docs=num_docs)
+            loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(query_embedding=query_embedding,
+                                                                    doc_embedding=doc_embedding,
+                                                                    label_ids=label_ids,
+                                                                    num_docs=num_docs)
             total_loss = loss_in_batch
             tf.summary.scalar("in_batch_loss", loss_in_batch)
         # without in-batch negative
@@ -1151,12 +1151,17 @@ def model_fn_builder(bert_config,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            logging_hook = tf.train.LoggingTensorHook(
-                {"loss": per_example_loss_stu,
-                 "input_ids_sbert_a": input_ids_sbert_a,
-                 "input_ids_sbert_b": input_ids_sbert_b},
-                every_n_iter=1
-            )
+            if FLAGS.use_in_batch_neg:
+                logging_hook = tf.train.LoggingTensorHook(
+                    {"score_in_batch": scores_in_batch,
+                     "label_ids_in_batch":label_ids_in_batch},
+                    every_n_iter=1
+                )
+            else:
+                logging_hook = tf.train.LoggingTensorHook(
+                    {"probabilities": probabilities_student},
+                    every_n_iter=1
+                )
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
@@ -1691,18 +1696,18 @@ def contrastive_loss(teacher_model, query_model, doc_model, regular_embedding,
 
 def in_batch_negative_loss(query_embedding, doc_embedding, label_ids, num_docs):
     # select one batch query_embedding
-    query_embedding_in_batch = query_embedding[::num_docs]
+    query_embedding_in_batch = query_embedding[::num_docs, :]
     # [bs, bs*num_docs]
     scores_in_batch = tf.matmul(query_embedding_in_batch, doc_embedding, transpose_b=True)
     # in-batch label_ids [bs, bs*num_docs]
     label_ids = tf.cast(label_ids, dtype=tf.float32)
     label_ids_in_batch = tf.eye(FLAGS.train_batch_size * num_docs) * tf.expand_dims(label_ids,
                                                                                     axis=0)  # [bs*num_docs, bs*num_docs]
-    label_ids_in_batch = label_ids_in_batch[::num_docs]  # [bs, bs*num_docs]
-    scores_in_batch = tf.nn.softmax(scores_in_batch, axis=1)  # [bs]
+    label_ids_in_batch = label_ids_in_batch[::num_docs, :]  # [bs, bs*num_docs]
+    scores_in_batch = tf.nn.softmax(scores_in_batch, axis=1)  # [bs, bs*num_docs]
     log_scores_in_batch = tf.log(scores_in_batch + 1e-7)
     loss_in_batch = - tf.reduce_mean(tf.reduce_sum(label_ids_in_batch * log_scores_in_batch, axis=-1))
-    return loss_in_batch
+    return loss_in_batch, scores_in_batch, label_ids_in_batch
 
 
 def contrastive_loss_self(teacher_model, query_model, doc_model,
