@@ -230,6 +230,8 @@ flags.DEFINE_bool("use_in_batch_neg", False, "Whether use in-batch negatives.")
 
 flags.DEFINE_integer("poly_first_m", 64, "number of tokens to ue in poly-encoder.")
 
+flags.DEFINE_integer("num_negatives_in_tfr", 4, "number of negative samples.")
+
 flags.DEFINE_integer("num_negatives", 4, "number of negative samples.")
 
 flags.DEFINE_integer("num_train_steps", 5000000, "number of train steps.")
@@ -492,9 +494,9 @@ def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
         "positive_doc_segment_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
         "positive_doc_masks": tf.FixedLenFeature([seq_length_doc], tf.int64),
 
-        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives], tf.int64),
-        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives], tf.int64),
-        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives], tf.int64),
+        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
     }
 
     def _decode_record(record, name_to_features):
