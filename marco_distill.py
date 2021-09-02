@@ -1201,21 +1201,21 @@ def model_fn_builder(bert_config,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            if FLAGS.use_in_batch_neg:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"score_in_batch": scores_in_batch},
-                    every_n_iter=1
-                )
-            else:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"probabilities": probabilities_student},
-                    every_n_iter=1
-                )
+            # if FLAGS.use_in_batch_neg:
+            #     logging_hook = tf.train.LoggingTensorHook(
+            #         {"score_in_batch": scores_in_batch},
+            #         every_n_iter=1
+            #     )
+            # else:
+            #     logging_hook = tf.train.LoggingTensorHook(
+            #         {"probabilities": probabilities_student},
+            #         every_n_iter=1
+            #     )
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                training_hooks=[logging_hook],
+                # training_hooks=[logging_hook],
                 scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
