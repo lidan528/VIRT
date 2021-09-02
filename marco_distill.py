@@ -19,6 +19,7 @@ import random
 import sys
 
 import numpy
+
 numpy.set_printoptions(threshold=sys.maxsize)
 
 # reload(sys)
@@ -109,7 +110,7 @@ flags.DEFINE_bool(
 )
 
 flags.DEFINE_bool(
-    "use_layer_distill",  False,
+    "use_layer_distill", False,
     "whether to use distill for hidden layer."
 )
 
@@ -147,7 +148,6 @@ flags.DEFINE_bool(
     "use_contrast_teacher_separately", None,
     "Whether to use attention distillations self"
 )
-
 
 flags.DEFINE_float(
     "weight_contrast", None,
@@ -236,7 +236,6 @@ flags.DEFINE_integer("num_negatives", 4, "number of negative samples.")
 
 flags.DEFINE_integer("num_train_steps", 5000000, "number of train steps.")
 
-
 tf.flags.DEFINE_string(
     "model_type", None,
     "which model to use"
@@ -307,6 +306,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
     #     tokens_b = tokenizer.tokenize(example.text_b)
     tokens_a = tokenizer.tokenize(example.text_a)
     tokens_b = tokenizer.tokenize(example.text_b)
+
     #
     # if len(tokens_a) > max_seq_length_bert - 2:
     #     tokens_a = tokens_a[0:(max_seq_length_bert - 2)]
@@ -338,7 +338,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         在双塔模型中, 将sen1与sen2分别设置为对半分开的max_len
         """
         # 交互: [CLS] a,a,a,a,a,a, [SEP], b, b, b, b ,b [SEP]
-        max_seq_length_bert = 1 + max_seq_length_query-2 + 1 + max_seq_length_doc-2 + 1
+        max_seq_length_bert = 1 + max_seq_length_query - 2 + 1 + max_seq_length_doc - 2 + 1
         max_token_len = max_seq_length_bert - 3
         max_a_len = max_seq_length_query - 2
         max_b_len = max_seq_length_doc - 2
@@ -354,23 +354,23 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
             tokens_bert_tmp.append(t_a)
             segment_ids_bert.append(0)
         input_ids_bert = tokenizer.convert_tokens_to_ids(tokens_bert_tmp)
-        input_masks_bert = [1]*len(input_ids_bert)          # [CLS], a,a,
+        input_masks_bert = [1] * len(input_ids_bert)  # [CLS], a,a,
         while len(input_ids_bert) < 1 + max_a_len:
             input_ids_bert.append(0)
             input_masks_bert.append(0)
             segment_ids_bert.append(0)
         tokens_bert_tmp.append("[SEP]")
-        input_ids_bert += tokenizer.convert_tokens_to_ids(["[SEP]"])     #[CLS], a,a,a,<PAD>,[SEP],
+        input_ids_bert += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>,[SEP],
         input_masks_bert.append(1)
         segment_ids_bert.append(0)
         # ---------------------------------
-        tokens_bert_tmp =[]
+        tokens_bert_tmp = []
         for t_b in tokens_tmp_b:
             tokens_bert_tmp.append(t_b)
             input_masks_bert.append(1)
             segment_ids_bert.append(1)
         input_ids_bert += tokenizer.convert_tokens_to_ids(tokens_bert_tmp)  # [CLS], a,a,a,<PAD>,[SEP], b,b,b
-        while len(input_ids_bert) <  1 + max_a_len + 1 + max_b_len:
+        while len(input_ids_bert) < 1 + max_a_len + 1 + max_b_len:
             input_ids_bert.append(0)
             input_masks_bert.append(0)
             segment_ids_bert.append(1)
@@ -434,12 +434,12 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
         input_mask = [1] * len(input_ids)  # [CLS], a,a,a
 
-        while len(input_ids) < max_len-1: # [CLS], a,a,a,<PAD>,
+        while len(input_ids) < max_len - 1:  # [CLS], a,a,a,<PAD>,
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
         tokens_p.append("[SEP]")
-        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])     # [CLS], a,a,a,<PAD>, [SEP]
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>, [SEP]
         input_mask.append(1)
         segment_ids.append(0)
 
@@ -458,7 +458,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
         tf.logging.info("*** Example ***")
         tf.logging.info("guid: %s" % (example.guid))
         tf.logging.info("tokens: %s" % " ".join(
-            [tokenization.printable_text(x) for x in ["[CLS]"]+tokens_a+["[SEP]"]+tokens_b+["[SEP]"]]))
+            [tokenization.printable_text(x) for x in ["[CLS]"] + tokens_a + ["[SEP]"] + tokens_b + ["[SEP]"]]))
 
         tf.logging.info("input_ids_bert_ab: %s" % " ".join([str(x) for x in input_ids_bert_ab]))
         tf.logging.info("input_mask_bert_ab: %s" % " ".join([str(x) for x in input_mask_bert_ab]))
@@ -494,9 +494,9 @@ def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
         "positive_doc_segment_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
         "positive_doc_masks": tf.FixedLenFeature([seq_length_doc], tf.int64),
 
-        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc*FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
     }
 
     def _decode_record(record, name_to_features):
@@ -558,11 +558,11 @@ def create_model_bert(bert_config, is_training, input_ids, input_mask,
         output_layer = model.get_sequence_output()
 
         # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
-        mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)     # mask: [bs_size, max_len, 1]
-        masked_output_layer = mask * output_layer       # [bs_size, max_len, emb_dim]
-        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)    # [bs_size, emb_dim]
+        mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+        masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+        sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
         actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
-        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)# [bs_size, 1]
+        actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
         output_layer = sum_masked_output_layer / actual_token_nums
 
         # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
@@ -601,11 +601,11 @@ def create_model_sbert(bert_config, is_training, input_ids, input_mask,
             output_layer = model.get_sequence_output()
 
             # output_layer: [bs_size, max_len, emb_dim];        input_mask: [bs_size, max_len]
-            mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)     # mask: [bs_size, max_len, 1]
-            masked_output_layer = mask * output_layer       # [bs_size, max_len, emb_dim]
-            sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)    # [bs_size, emb_dim]
+            mask = tf.cast(tf.expand_dims(input_mask, axis=-1), dtype=tf.float32)  # mask: [bs_size, max_len, 1]
+            masked_output_layer = mask * output_layer  # [bs_size, max_len, emb_dim]
+            sum_masked_output_layer = tf.reduce_sum(masked_output_layer, axis=1)  # [bs_size, emb_dim]
             actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
-            actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)# [bs_size, 1]
+            actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
             output_layer = sum_masked_output_layer / actual_token_nums
 
             # token_embedding_sum = tf.reduce_sum(output_layer, 1)  # batch*hidden_size
@@ -641,9 +641,9 @@ def create_model_Deformer(bi_layer_num, cross_layer_num, bert_config, is_trainin
                                                       scope="bert_student",
                                                       is_reuse=tf.AUTO_REUSE,
                                                       pooling=False)
-    combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)     #[bs, seq_len ,emb_dim]
-    combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
-    combined_att_masks = create_att_mask_for1(combined_input_masks)                    #[bs, seq_len, seq_len]
+    combined_embeddings = tf.concat([query_embedding, doc_embedding], axis=1)  # [bs, seq_len ,emb_dim]
+    combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)  # [bs, seq_len]
+    combined_att_masks = create_att_mask_for1(combined_input_masks)  # [bs, seq_len, seq_len]
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
     batch_size = input_shape[0]
     seq_length = input_shape[1]
@@ -835,14 +835,14 @@ def model_fn_builder(bert_config,
             #                                       [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
             # negative_doc_masks = tf.reshape(negative_doc_masks,
             #                                 [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            negative_doc_ids = negative_doc_ids[:FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_masks = negative_doc_masks[:FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_segment_ids = negative_doc_segment_ids[:FLAGS.num_negatives * FLAGS.max_seq_length_doc]
+            negative_doc_ids = negative_doc_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
+            negative_doc_masks = negative_doc_masks[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
+            negative_doc_segment_ids = negative_doc_segment_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
 
             input_ids_sbert_b = tf.reshape(tf.concat([positive_doc_ids, negative_doc_ids], axis=1),
                                            [FLAGS.train_batch_size * num_docs, -1])
             input_mask_sbert_b = tf.reshape(tf.concat([positive_doc_masks, negative_doc_masks], axis=1),
-                                           [FLAGS.train_batch_size * num_docs, -1])
+                                            [FLAGS.train_batch_size * num_docs, -1])
             segment_ids_sbert_b = tf.reshape(tf.concat([positive_doc_segment_ids, negative_doc_segment_ids], axis=1),
                                              [FLAGS.train_batch_size * num_docs, -1])
 
@@ -858,7 +858,7 @@ def model_fn_builder(bert_config,
             cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
             cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
 
-            label_ids = tf.constant([1] + [0]*FLAGS.num_negatives, dtype=tf.int32)
+            label_ids = tf.constant([1] + [0] * FLAGS.num_negatives, dtype=tf.int32)
             label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
 
             # label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
@@ -885,8 +885,10 @@ def model_fn_builder(bert_config,
 
         elif FLAGS.model_type == 'deformer':
             tf.logging.info("*********** use deformer as the model backbone...*******************")
-            regular_embedding, model_stu_query, model_stu_doc = create_model_Deformer(bi_layer_num=11, cross_layer_num=1,
-                                                                                      bert_config=bert_config, is_training=is_training,
+            regular_embedding, model_stu_query, model_stu_doc = create_model_Deformer(bi_layer_num=11,
+                                                                                      cross_layer_num=1,
+                                                                                      bert_config=bert_config,
+                                                                                      is_training=is_training,
                                                                                       input_ids_a=input_ids_sbert_a,
                                                                                       input_mask_a=input_mask_sbert_a,
                                                                                       segment_ids_a=segment_ids_sbert_a,
@@ -954,7 +956,8 @@ def model_fn_builder(bert_config,
                                                               scope="bert_student",
                                                               is_reuse=tf.AUTO_REUSE,
                                                               pooling=False)
-            regular_embedding = newly_late_interaction(query_embedding, input_mask_sbert_a, doc_embedding, input_mask_sbert_b)
+            regular_embedding = newly_late_interaction(query_embedding, input_mask_sbert_a, doc_embedding,
+                                                       input_mask_sbert_b)
 
         else:
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
@@ -996,19 +999,19 @@ def model_fn_builder(bert_config,
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
         teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
-                                                                input_ids = cross_input_ids,
-                                                                input_mask = cross_input_masks,
-                                                                segment_ids= cross_segment_ids,
-                                                                use_one_hot_embeddings = use_one_hot_embeddings,
-                                                                scope = "bert_teacher",
-                                                                is_reuse = tf.AUTO_REUSE)
+                                                                input_ids=cross_input_ids,
+                                                                input_mask=cross_input_masks,
+                                                                segment_ids=cross_segment_ids,
+                                                                use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                scope="bert_teacher",
+                                                                is_reuse=tf.AUTO_REUSE)
         loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
             get_prediction_teacher(teacher_output_layer=teacher_output_layer,
                                    num_labels=num_rele_label,
                                    labels=label_ids,
                                    is_training=False)
 
-        vars_teacher = tf.trainable_variables()             # stu + teacher
+        vars_teacher = tf.trainable_variables()  # stu + teacher
         for var_ in vars_student:
             vars_teacher.remove(var_)
 
@@ -1077,7 +1080,6 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("hidden_loss", distill_hidden_loss)
             tf.summary.scalar("hidden_loss_scaled", scaled_hidden_loss)
 
-
         # contrast loss self....
         if FLAGS.use_contrast_self:
             tf.logging.info('*****use contrast loss self...')
@@ -1108,8 +1110,6 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("contrast_loss_teacher", distill_contrast_loss)
             tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
 
-
-
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
         assignment_map_teacher, initialized_variable_names_teacher = \
@@ -1126,12 +1126,14 @@ def model_fn_builder(bert_config,
 
         tf.logging.info('****-------------------------init teacher----------------------*****')
         for v_t in assignment_map_teacher:
-            tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t],v_t))
+            tf.logging.info(
+                '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t], v_t))
         tf.logging.info('--------------------------------------------------------------------')
 
         tf.logging.info('****-------------------------init student----------------------*****')
         for v_s in assignment_map_student:
-            tf.logging.info('**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
+            tf.logging.info(
+                '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
         tf.logging.info('--------------------------------------------------------------------')
 
         #
@@ -1215,7 +1217,6 @@ def get_prediction_teacher(teacher_output_layer, num_labels, labels, is_training
     """
     hidden_size = teacher_output_layer.shape[-1].value
     with tf.variable_scope("cls_teacher"):
-
         output_weights = tf.get_variable(
             "output_weights", [num_labels, hidden_size],
             initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -1329,8 +1330,7 @@ def poly_encoder(query_embedding, doc_embedding, input_mask_b, bert_config):
     return final_vecs
 
 
-
-def col_bert(query_embedding, doc_embedding, input_mask_a, input_mask_b,  num_rele_label, bert_config):
+def col_bert(query_embedding, doc_embedding, input_mask_a, input_mask_b, num_rele_label, bert_config):
     import math
     def max_attention_score(q, k):
         # q [B, S, num_label, H], v [B, T, num_label, H]
@@ -1380,8 +1380,6 @@ def col_bert(query_embedding, doc_embedding, input_mask_a, input_mask_b,  num_re
     return logits, probabilities, log_probs
 
 
-
-
 def create_att_mask_for2(input_mask_1, input_mask_2):
     """
     相当于将input_mask列表复制seq_len次
@@ -1399,7 +1397,7 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
     broadcast_ones = tf.ones(
         shape=[batch_size, seq_length_self, 1], dtype=tf.float32)
 
-    mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
+    mask = broadcast_ones * mask  # [batch_size, seq_length_another, seq_length_self]
     return mask
 
 
@@ -1407,14 +1405,14 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     # query_embeddings: [bs, query_len, emb]
     # doc_embeddings: [bs, doc_len, emb]
     emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
-    query2doc_att = tf.matmul(query_embeddings, doc_embeddings, transpose_b=True)   # [bs, query_len, doc_len]
+    query2doc_att = tf.matmul(query_embeddings, doc_embeddings, transpose_b=True)  # [bs, query_len, doc_len]
     query2doc_att = tf.multiply(query2doc_att,
                                 1.0 / math.sqrt(float(emb_dim)))
-    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)         # [bs, query_len, doc_len]
+    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)  # [bs, query_len, doc_len]
     adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
     query2doc_scores = query2doc_att + adder1
-    query2doc_probs = tf.nn.softmax(query2doc_scores)       # [bs, query_len, doc_len]
-    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)     # [bs,  query_len, emb]
+    query2doc_probs = tf.nn.softmax(query2doc_scores)  # [bs, query_len, doc_len]
+    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)  # [bs,  query_len, emb]
     embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=1)
 
     doc2query_att = tf.matmul(doc_embeddings, query_embeddings, transpose_b=True)
@@ -1423,8 +1421,8 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     doc2query_mask = create_att_mask_for2(doc_mask, query_mask)
     adder2 = (1.0 - tf.cast(doc2query_mask, tf.float32)) * -10000.0
     doc2query_scores = doc2query_att + adder2
-    doc2query_probs = tf.nn.softmax(doc2query_scores)       # [bs, doc_len, query_len]
-    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)   # [bs,  doc_len, emb]
+    doc2query_probs = tf.nn.softmax(doc2query_scores)  # [bs, doc_len, query_len]
+    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)  # [bs,  doc_len, emb]
     embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
 
     sub_embedding = tf.abs(embedding1 - embedding2)
@@ -1432,8 +1430,6 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, max_embedding], -1)
 
     return regular_embedding
-
-
 
 
 def create_att_mask(input_mask, seq_length_another):
@@ -1451,7 +1447,7 @@ def create_att_mask(input_mask, seq_length_another):
     broadcast_ones = tf.ones(
         shape=[batch_size, seq_length_another, 1], dtype=tf.float32)
 
-    mask = broadcast_ones * mask        #[batch_size, seq_length_another, seq_length_self]
+    mask = broadcast_ones * mask  # [batch_size, seq_length_another, seq_length_self]
     return mask
 
 
@@ -1461,7 +1457,7 @@ def create_att_mask_for1(input_mask):
     得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
     从而防止input_mask为0的元素被att，但它可以att to别的元素
     """
-    to_shape = modeling.get_shape_list(input_mask, expected_rank=2)     #[batch-size, seq_len]
+    to_shape = modeling.get_shape_list(input_mask, expected_rank=2)  # [batch-size, seq_len]
     batch_size = to_shape[0]
     seq_length = to_shape[1]
     mask = tf.cast(
@@ -1490,7 +1486,7 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
     stu_do_all_q_w_4d, stu_do_all_k_w_4d = model_student_doc.all_attention_scores_before_mask, model_student_doc.all_attention_probs_ori, \
                                            model_student_doc.all_q_w_4d, model_student_doc.all_k_w_4d
 
-    size_per_head =  int(model_teacher.hidden_size / model_teacher.num_attention_heads)
+    size_per_head = int(model_teacher.hidden_size / model_teacher.num_attention_heads)
     tf.logging.info("size_per_head: {}, expected 64 for base".format(size_per_head))
 
     loss, num = 0, 0
@@ -1504,34 +1500,39 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
         # sbert_query_qw: [bs, num_heads, seq_len=130, head_dim]
         # sbert_doc_kw: [bs, num_heads, seq_len, head_dim]
         # bert_att_score: [bs, num_heads, 2*seq_len-1, 2*seq_len-1]
-        query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :], transpose_b=True)  #[bs, num_heads, 128, 128]
+        query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :],
+                                 transpose_b=True)  # [bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,
                                    1.0 / math.sqrt(float(size_per_head)))
-        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc, FLAGS.max_seq_length_query)    # doc中的padding元素不应该被attend, [bs, 130, 130]
-        query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1], axis=[1])  #to [bs, 1, seq_len=128, seq_len=128]
+        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc,
+                                                    FLAGS.max_seq_length_query)  # doc中的padding元素不应该被attend, [bs, 130, 130]
+        query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1],
+                                                   axis=[1])  # to [bs, 1, seq_len=128, seq_len=128]
         query_doc_att_matrix_mask_adder = (1.0 - tf.cast(query_doc_att_matrix_mask, tf.float32)) * -10000.0
         query_doc_att_scores = query_doc_qk + query_doc_att_matrix_mask_adder
         query_doc_att_probs = tf.nn.softmax(query_doc_att_scores)
 
         sbert_att_shape = modeling.get_shape_list(sbert_query_qw, expected_rank=4)  # [bs, num_heads, seq_len, head_dim]
         seq_len_sbert = sbert_att_shape[2]
-        bert_att_score_query_doc = bert_att_score[:,:, 1:(seq_len_sbert-1), seq_len_sbert:-1]    #[bs, num_heads, seq_len=128, seq_len=128]
+        bert_att_score_query_doc = bert_att_score[:, :, 1:(seq_len_sbert - 1),
+                                   seq_len_sbert:-1]  # [bs, num_heads, seq_len=128, seq_len=128]
         bert_att_score_query_doc = bert_att_score_query_doc + query_doc_att_matrix_mask_adder
         bert_att_probs_query_doc = tf.nn.softmax(bert_att_score_query_doc)
         loss = loss + tf.losses.mean_squared_error(query_doc_att_probs, bert_att_probs_query_doc)
-        #-------------------------------------------------------------------
+        # -------------------------------------------------------------------
 
-
-        doc_query_qk = tf.matmul(sbert_doc_qw[:, :, 1:-1, :], sbert_query_kw[:, :, 1:-1, :], transpose_b=True)  #[bs, num_heads, 128, 128]
+        doc_query_qk = tf.matmul(sbert_doc_qw[:, :, 1:-1, :], sbert_query_kw[:, :, 1:-1, :],
+                                 transpose_b=True)  # [bs, num_heads, 128, 128]
         doc_query_qk = tf.multiply(doc_query_qk,
                                    1.0 / math.sqrt(float(size_per_head)))
         doc_query_att_matrix_mask = create_att_mask(input_mask_sbert_query, FLAGS.max_seq_length_doc)
-        doc_query_att_matrix_mask = tf.expand_dims(doc_query_att_matrix_mask[:, 1:-1, 1:-1], axis=[1])  #to [bs, 1, seq_len=128, seq_len=128]
+        doc_query_att_matrix_mask = tf.expand_dims(doc_query_att_matrix_mask[:, 1:-1, 1:-1],
+                                                   axis=[1])  # to [bs, 1, seq_len=128, seq_len=128]
         doc_query_att_matrix_mask_adder = (1.0 - tf.cast(doc_query_att_matrix_mask, tf.float32)) * -10000.0
         doc_query_att_scores = doc_query_qk + doc_query_att_matrix_mask_adder
         doc_query_att_probs = tf.nn.softmax(doc_query_att_scores)
 
-        bert_att_score_doc_query = bert_att_score[:, :, seq_len_sbert:-1, 1:(seq_len_sbert-1)]
+        bert_att_score_doc_query = bert_att_score[:, :, seq_len_sbert:-1, 1:(seq_len_sbert - 1)]
         bert_att_score_doc_query = bert_att_score_doc_query + doc_query_att_matrix_mask_adder
         bert_att_probs_doc_query = tf.nn.softmax(bert_att_score_doc_query)
         loss = loss + tf.losses.mean_squared_error(doc_query_att_probs, bert_att_probs_doc_query)
@@ -1555,7 +1556,7 @@ def get_pooled_embeddings(encode_layer, input_mask):
     actual_token_nums = tf.reduce_sum(input_mask, axis=-1)  # [bs_size]
     actual_token_nums = tf.cast(tf.expand_dims(actual_token_nums, axis=-1), dtype=tf.float32)  # [bs_size, 1]
     output_layer = sum_masked_output_layer / actual_token_nums
-    return output_layer     # [bs_size, emb_dim]
+    return output_layer  # [bs_size, emb_dim]
 
 
 def get_pooled_embeddings_for2(encoder_layer1, encoder_layer2, input_mask1, input_mask2):
@@ -1564,8 +1565,8 @@ def get_pooled_embeddings_for2(encoder_layer1, encoder_layer2, input_mask1, inpu
     encoder_layer:  [bs, seq_len, emb_dim]
     input_mask: [bs, seq_len]
     """
-    input_mask = tf.concat([input_mask1, input_mask2], axis=-1)     #[bs, seq_len1+seq_len2]
-    encoder_layer = tf.concat([encoder_layer1, encoder_layer2], axis=1)   #[bs, seq_len1+seq_len2, emb_dim]
+    input_mask = tf.concat([input_mask1, input_mask2], axis=-1)  # [bs, seq_len1+seq_len2]
+    encoder_layer = tf.concat([encoder_layer1, encoder_layer2], axis=1)  # [bs, seq_len1+seq_len2, emb_dim]
     output_layer = get_pooled_embeddings(encoder_layer, input_mask)
     return output_layer
 
@@ -1576,16 +1577,16 @@ def cosine_distance(X1, X2):
     X1 : [bs, emb_dim]
     X2:  [bs, emb_dim]
     """
-    X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=-1))    #[bs]
-    X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=-1))    #[bs]
+    X1_norm = tf.sqrt(tf.reduce_sum(tf.square(X1), axis=-1))  # [bs]
+    X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=-1))  # [bs]
     X1_norm_X2_norm = X1_norm * X2_norm
 
-    X1_X2 = X1 * X2     #[bs * emb_dim]
-    X1_X2 = tf.reduce_sum(X1_X2, axis=-1)           #[bs]
+    X1_X2 = X1 * X2  # [bs * emb_dim]
+    X1_X2 = tf.reduce_sum(X1_X2, axis=-1)  # [bs]
 
-    cosine = X1_X2 / X1_norm_X2_norm        # 相似度，越大越好, [bs]
+    cosine = X1_X2 / X1_norm_X2_norm  # 相似度，越大越好, [bs]
     cosine = tf.reduce_mean(cosine, axis=-1)
-    return 1-cosine             #distance
+    return 1 - cosine  # distance
 
 
 def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
@@ -1606,7 +1607,7 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
         loss, cnt = 0, 0
         for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
             # each layer is [bs, seq_len, emb_dim]
-            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
+            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)  # [bs, emb_dim]
             pooled_student_layer = get_pooled_embeddings_for2(query_layer, doc_layer, input_mask_query, input_mask_doc)
             # loss += tf.reduce_sum(tf.square(pooled_teacher_layer-pooled_student_layer))     # squared error
             loss += cosine_distance(pooled_student_layer, pooled_teacher_layer)
@@ -1623,9 +1624,9 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             initializer=tf.zeros_initializer())
         for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
             # each layer is [bs, seq_len, emb_dim]
-            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)     #[bs, emb_dim]
-            pooled_query_layer = get_pooled_embeddings(query_layer, input_mask_query)       #[bs, emb_dim]
-            pooled_doc_layer = get_pooled_embeddings(doc_layer, input_mask_doc)             #[bs, emb_dim]
+            pooled_teacher_layer = get_pooled_embeddings(teacher_layer, input_mask_teacher)  # [bs, emb_dim]
+            pooled_query_layer = get_pooled_embeddings(query_layer, input_mask_query)  # [bs, emb_dim]
+            pooled_doc_layer = get_pooled_embeddings(doc_layer, input_mask_doc)  # [bs, emb_dim]
             sub_embedding = tf.abs(pooled_query_layer - pooled_doc_layer)
             max_embedding = tf.square(tf.reduce_max([pooled_query_layer, pooled_doc_layer], axis=0))
             regular_embedding = tf.concat([pooled_query_layer, pooled_doc_layer, sub_embedding, max_embedding], -1)
@@ -1638,7 +1639,7 @@ def get_pooled_loss(teacher_model, student_model_query, student_model_doc,
             cnt = 1
         return loss / cnt
     else:
-        assert 1==2
+        assert 1 == 2
 
 
 def cos_sim_loss_for_contrast(matrix_a, matrix_b):
@@ -1695,7 +1696,8 @@ def in_batch_negative_loss(query_embedding, doc_embedding, label_ids, num_docs):
     scores_in_batch = tf.matmul(query_embedding_in_batch, doc_embedding, transpose_b=True)
     # in-batch label_ids [bs, bs*num_docs]
     label_ids = tf.cast(label_ids, dtype=tf.float32)
-    label_ids_in_batch = tf.eye(FLAGS.train_batch_size * num_docs) * tf.expand_dims(label_ids, axis=0)  # [bs*num_docs, bs*num_docs]
+    label_ids_in_batch = tf.eye(FLAGS.train_batch_size * num_docs) * tf.expand_dims(label_ids,
+                                                                                    axis=0)  # [bs*num_docs, bs*num_docs]
     label_ids_in_batch = label_ids_in_batch[::num_docs]  # [bs, bs*num_docs]
     scores_in_batch = tf.nn.softmax(scores_in_batch, axis=1)  # [bs]
     log_scores_in_batch = tf.log(scores_in_batch + 1e-7)
@@ -1711,19 +1713,20 @@ def contrastive_loss_self(teacher_model, query_model, doc_model,
     如果S1与S2的标签是吻合，就将其作为正例；并将同batch内对面的所有其他输入作为负例；
     暂时只计算一个塔
     """
+
     def cos_loss_self(matrix_a, matrix_b, label_mask):
         """
         label_mask: 代表哪个是正例，即语义是吻合的, label为1  [bs]
         """
-        dot_result = tf.matmul(matrix_a, matrix_b, transpose_b=True)            #[bs , bs]   dot
-        norm2_a_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_a), axis=1, keep_dims=True))    #[bs, 1]  |a|
-        norm2_b_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_b), axis=1, keep_dims=True))    #[bs, 1], |b|
-        norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)                  #[bs, bs], |a||b|
+        dot_result = tf.matmul(matrix_a, matrix_b, transpose_b=True)  # [bs , bs]   dot
+        norm2_a_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_a), axis=1, keep_dims=True))  # [bs, 1]  |a|
+        norm2_b_output = tf.sqrt(tf.reduce_sum(tf.square(matrix_b), axis=1, keep_dims=True))  # [bs, 1], |b|
+        norm2_ab = tf.matmul(norm2_a_output, norm2_b_output, transpose_b=True)  # [bs, bs], |a||b|
         cos_sim = tf.divide(dot_result, norm2_ab)  # batch_size * batch_size
         cos_sim = tf.nn.softmax(cos_sim, axis=1)
         log_cos_elem = tf.log(cos_sim)
-        diag_elem = tf.multiply(tf.eye(tf.shape(cos_sim)[0]), log_cos_elem)      #[bs, bs] only diag remained
-        label_mask = tf.cast(tf.expand_dims(label_mask, axis=-1), dtype=tf.float32)     #[bs, 1]
+        diag_elem = tf.multiply(tf.eye(tf.shape(cos_sim)[0]), log_cos_elem)  # [bs, bs] only diag remained
+        label_mask = tf.cast(tf.expand_dims(label_mask, axis=-1), dtype=tf.float32)  # [bs, 1]
         matched_diag_elem = tf.multiply(diag_elem, label_mask)
         loss = tf.reduce_sum(matched_diag_elem)
         return loss
@@ -1761,10 +1764,12 @@ def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
         pooled_query_layer = get_pooled_embeddings(query_layer[:, 1:-1, :], input_mask_query[:, 1:-1])  # [bs, emb_dim]
         pooled_doc_layer = get_pooled_embeddings(doc_layer[:, 1:-1, :], input_mask_doc[:, 1:-1])  # [bs, emb_dim]
 
-        query_length = modeling.get_shape_list(query_layer, expected_rank=3)[1]   #[bs, query_len, emb_dim]
+        query_length = modeling.get_shape_list(query_layer, expected_rank=3)[1]  # [bs, query_len, emb_dim]
         # doc_length = modeling.get_shape_list(doc_layer, expected_rank=3)[1]
-        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length-1, :], input_mask_teacher[:, 1:query_length-1])
-        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :], input_mask_teacher[:, query_length:-1])
+        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length - 1, :],
+                                              input_mask_teacher[:, 1:query_length - 1])
+        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :],
+                                            input_mask_teacher[:, query_length:-1])
 
         loss_query = cos_sim_loss_for_contrast(teacher_query, pooled_query_layer)
         loss_doc = cos_sim_loss_for_contrast(teacher_doc, pooled_doc_layer)
@@ -1778,7 +1783,6 @@ def kl(p, q):
     计算kl散度
     """
     p_q = p / q
-
 
 
 def serving_input_receiver_fn(max_seq_length):
@@ -1809,7 +1813,7 @@ def main(_):
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
-    label_list = [0,1]
+    label_list = [0, 1]
 
     tokenizer = tokenization.FullTokenizer(
         vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -1825,7 +1829,7 @@ def main(_):
         master=FLAGS.master,
         model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-        keep_checkpoint_max = 80,
+        keep_checkpoint_max=80,
         tpu_config=tf.contrib.tpu.TPUConfig(
             iterations_per_loop=FLAGS.iterations_per_loop,
             num_shards=FLAGS.num_tpu_cores,
@@ -1917,7 +1921,7 @@ def main(_):
                 steps_and_files.append((global_step, cur_filename))
                 tf.logging.info("add {} to eval list...".format(cur_filename))
 
-        steps_and_files = sorted(steps_and_files, key=lambda x:x[0])
+        steps_and_files = sorted(steps_and_files, key=lambda x: x[0])
 
         best_metric, best_ckpt = 0, ''
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
