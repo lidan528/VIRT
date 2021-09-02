@@ -1497,6 +1497,7 @@ def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, labe
     # query_embeddings: [bs*num_docs, query_len, emb]
     # doc_embeddings: [bs*num_docs, doc_len, emb]
     query_embeddings = query_embeddings[::num_docs, :]  # [bs, query_len, emb]
+    query_mask = query_mask[::num_docs, :]
     emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
     att = tf.einsum('bih,ajh->baij', query_embeddings, doc_embeddings)
     att = tf.multiply(att, 1.0 / math.sqrt(float(emb_dim)))
