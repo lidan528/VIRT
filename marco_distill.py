@@ -1200,22 +1200,21 @@ def model_fn_builder(bert_config,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            # if FLAGS.use_in_batch_neg:
-            #     logging_hook = tf.train.LoggingTensorHook(
-            #         {"score_in_batch": scores_in_batch,
-            #          "label_ids_in_batch": label_ids_in_batch},
-            #         every_n_iter=1
-            #     )
-            # else:
-            #     logging_hook = tf.train.LoggingTensorHook(
-            #         {"probabilities": probabilities_student},
-            #         every_n_iter=1
-            #     )
+            if FLAGS.use_in_batch_neg:
+                logging_hook = tf.train.LoggingTensorHook(
+                    {"score_in_batch": scores_in_batch},
+                    every_n_iter=1
+                )
+            else:
+                logging_hook = tf.train.LoggingTensorHook(
+                    {"probabilities": probabilities_student},
+                    every_n_iter=1
+                )
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                # training_hooks=[logging_hook],
+                training_hooks=[logging_hook],
                 scaffold_fn=None)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
@@ -1456,7 +1455,10 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
 
 
 def create_att_mask_4d(input_mask_1, input_mask_2):
-    pass
+    input_mask_1 = tf.expand_dims(tf.expand_dims(input_mask_1, axis=1), axis=-1)
+    input_mask_2 = tf.expand_dims(tf.expand_dims(input_mask_2, axis=0), axis=-2)
+
+    return input_mask_1 * input_mask_2
 
 
 def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mask):
