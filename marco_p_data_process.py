@@ -85,9 +85,9 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
             return [t for l in fl for t in l]
 
         # truncate negative docs
-        negative_doc_ids = negative_doc_ids[:4]
-        negative_segment_ids = negative_segment_ids[:4]
-        negative_doc_masks = negative_doc_masks[:4]
+        # negative_doc_ids = negative_doc_ids[:4]
+        # negative_segment_ids = negative_segment_ids[:4]
+        # negative_doc_masks = negative_doc_masks[:4]
         while len(negative_doc_ids) < 4:
             # negative_doc_ids.append([0] * max_doc_length)
             # negative_segment_ids.append([0] * max_doc_length)
@@ -202,7 +202,7 @@ def _data_generate(doc_data, query_data, id_file):
             "qid": qid,
             "query": query_data[qid],
             "positive_docs": [doc_data[pid]],
-            "negative_docs": [doc_data[nid] for nid in nids[:4]]
+            "negative_docs": [doc_data[nid] for nid in nids[:4]]  # truncate negative docs
         })
     return train_data
 
