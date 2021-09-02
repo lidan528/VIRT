@@ -1021,10 +1021,11 @@ def model_fn_builder(bert_config,
         if FLAGS.model_type == "bi_encoder":
             if FLAGS.use_in_batch_neg:
                 tf.logging.info('*****use in batch negatives loss...')
-                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(query_embedding=query_embedding,
-                                                                                            doc_embedding=doc_embedding,
-                                                                                            label_ids=label_ids,
-                                                                                            num_docs=num_docs)
+                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(
+                    query_embedding=query_embedding,
+                    doc_embedding=doc_embedding,
+                    label_ids=label_ids,
+                    num_docs=num_docs)
                 total_loss = loss_in_batch
                 tf.summary.scalar("regular_loss", loss_in_batch)
             # without in-batch negative
@@ -1051,15 +1052,15 @@ def model_fn_builder(bert_config,
         elif FLAGS.model_type == "late_fusion":
             if FLAGS.use_in_batch_neg:
                 tf.logging.info('*****use in batch negatives loss...')
-                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    scores_in_batch = tf.layers.dense(regular_embedding, units=1)  # [bs*num_docs, 1]
-                scores_in_batch = tf.squeeze(scores_in_batch)
-                log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=0)
-                label_ids = tf.cast(label_ids, tf.float32)
-                per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
-                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                total_loss = regular_loss_stu
-                tf.summary.scalar("regular_loss", regular_loss_stu)
+                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_late_interaction(
+                    query_embeddings=query_embedding,
+                    query_mask=input_mask_sbert_a,
+                    doc_embeddings=doc_embedding,
+                    label_ids_in_batch=label_ids,
+                    num_docs=num_docs,
+                    doc_mask=input_mask_sbert_b)
+                total_loss = loss_in_batch
+                tf.summary.scalar("regular_loss", loss_in_batch)
             # without in-batch negative
             else:
                 tf.logging.info('*****use regular loss...')
@@ -1457,7 +1458,6 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
 def create_att_mask_4d(input_mask_1, input_mask_2):
     input_mask_1 = tf.expand_dims(tf.expand_dims(input_mask_1, axis=1), axis=-1)
     input_mask_2 = tf.expand_dims(tf.expand_dims(input_mask_2, axis=0), axis=-2)
-
     return input_mask_1 * input_mask_2
 
 
@@ -1492,38 +1492,35 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     return regular_embedding
 
 
-def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, num_docs, doc_mask):
+def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, label_ids_in_batch,
+                              num_docs, doc_mask):
     # query_embeddings: [bs*num_docs, query_len, emb]
     # doc_embeddings: [bs*num_docs, doc_len, emb]
     query_embeddings = query_embeddings[::num_docs, :]  # [bs, query_len, emb]
     emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
-    query2doc_att = tf.einsum('bih,ajh->baij', query_embeddings, doc_embeddings)
-    query2doc_att = tf.multiply(query2doc_att,
-                                1.0 / math.sqrt(float(emb_dim)))
-    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)  # [bs, query_len, doc_len]
+    att = tf.einsum('bih,ajh->baij', query_embeddings, doc_embeddings)
+    att = tf.multiply(att, 1.0 / math.sqrt(float(emb_dim)))
 
+    query2doc_mask = create_att_mask_4d(query_mask, doc_mask)  # [bs, bs*num_docs, query_len, doc_len]
     adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
-    query2doc_scores = query2doc_att + adder1
-    query2doc_probs = tf.nn.softmax(query2doc_scores)  # [bs, query_len, doc_len]
-    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)  # [bs,  query_len, emb]
-    embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+    query2doc_scores = att + adder1
+    query2doc_probs = tf.nn.softmax(query2doc_scores, axis=-1)  # [bs, bs*num_docs, query_len, doc_len]
+    weighted_doc_embedding = tf.einsum('baij,bjh->baih', query2doc_probs,
+                                       doc_embeddings)  # [bs, bs*num_docs, query_len, emb]
+    embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=2)  # [bs, bs*num_docs, emb]
 
-    doc2query_att = tf.matmul(doc_embeddings, query_embeddings, transpose_b=True)
-    doc2query_att = tf.multiply(doc2query_att,
-                                1.0 / math.sqrt(float(emb_dim)))
-    doc2query_mask = create_att_mask_for2(doc_mask, query_mask)
-    adder2 = (1.0 - tf.cast(doc2query_mask, tf.float32)) * -10000.0
-    doc2query_scores = doc2query_att + adder2
-    doc2query_probs = tf.nn.softmax(doc2query_scores)  # [bs, doc_len, query_len]
-    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)  # [bs,  doc_len, emb]
-    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+    doc2query_probs = tf.nn.softmax(query2doc_scores, axis=-2)  # [bs, bs*num_docs, query_len, doc_len]
+    weighted_doc_embedding = tf.einsum('baij,bih->bajh', doc2query_probs,
+                                       query_embeddings)  # [bs, bs*num_docs, doc_len, emb]
+    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=2)  # [bs, bs*num_docs, emb]
 
-    sub_embedding = tf.abs(embedding1 - embedding2)
-    dot_embedding = embedding1 * embedding2
-    regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, dot_embedding], -1)
+    scores_in_batch = tf.reduce_sum(embedding1 * embedding2, axis=-1)
+    scores_in_batch = tf.nn.softmax(scores_in_batch, axis=-1)
+    log_scores_in_batch = tf.log(scores_in_batch + 1e-7)
+    label_ids_in_batch = label_ids_in_batch[::num_docs, :]  # [bs, bs*num_docs]
+    loss_in_batch = - tf.reduce_mean(tf.reduce_sum(label_ids_in_batch * log_scores_in_batch, axis=-1))
 
-    return regular_embedding
-
+    return loss_in_batch, scores_in_batch, label_ids_in_batch
 
 
 def create_att_mask(input_mask, seq_length_another):
