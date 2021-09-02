@@ -978,23 +978,23 @@ def model_fn_builder(bert_config,
                                                               pooling=True)
             if FLAGS.model_type == 'sbert':
                 tf.logging.info("*********** use sbert as the model backbone...*******************")
-                sub_embedding = tf.abs(query_embedding - doc_embedding)
-                max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
-                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
+                # sub_embedding = tf.abs(query_embedding - doc_embedding)
+                # max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
+                # regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
             elif FLAGS.model_type == 'bi_encoder':
                 tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
-                regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
+                # regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
 
-        if FLAGS.model_type != 'col':
-            if FLAGS.use_resnet_predict:
-                tf.logging.info("*************use resnet in prediction..************************")
-                logits_student, probabilities_student, log_probs_student = \
-                    get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
-            else:
-                logits_student, probabilities_student, log_probs_student = \
-                    get_prediction_student(student_output_layer=regular_embedding,
-                                           num_labels=num_rele_label,
-                                           is_training=is_training)
+        # if FLAGS.model_type != 'col':
+        #     if FLAGS.use_resnet_predict:
+        #         tf.logging.info("*************use resnet in prediction..************************")
+        #         logits_student, probabilities_student, log_probs_student = \
+        #             get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
+        #     else:
+        #         logits_student, probabilities_student, log_probs_student = \
+        #             get_prediction_student(student_output_layer=regular_embedding,
+        #                                    num_labels=num_rele_label,
+        #                                    is_training=is_training)
 
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
@@ -1016,23 +1016,51 @@ def model_fn_builder(bert_config,
             vars_teacher.remove(var_)
 
         # in-batch negative loss....
-        if FLAGS.use_in_batch_neg:
-            tf.logging.info('*****use in batch negatives loss...')
-            loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(query_embedding=query_embedding,
-                                                                    doc_embedding=doc_embedding,
-                                                                    label_ids=label_ids,
-                                                                    num_docs=num_docs)
-            total_loss = loss_in_batch
-            tf.summary.scalar("in_batch_loss", loss_in_batch)
-        # without in-batch negative
-        else:
-            tf.logging.info('*****use regular loss...')
-            one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-            per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-            # per_example_loss_stu = per_example_loss_stu * label_mask
-            regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-            tf.summary.scalar("regular_loss", regular_loss_stu)
-            total_loss = regular_loss_stu
+        if FLAGS.model_type == "bi_encoder":
+            if FLAGS.use_in_batch_neg:
+                tf.logging.info('*****use in batch negatives loss...')
+                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(query_embedding=query_embedding,
+                                                                                            doc_embedding=doc_embedding,
+                                                                                            label_ids=label_ids,
+                                                                                            num_docs=num_docs)
+                total_loss = loss_in_batch
+                tf.summary.scalar("regular_loss", loss_in_batch)
+            # without in-batch negative
+            else:
+                tf.logging.info('*****use regular loss...')
+                doc_embedding = tf.reshape(doc_embedding, [FLAGS.train_batch_size, num_docs, -1])
+                scores_in_batch = tf.einsum('bh,bih->bi', query_embedding, doc_embedding)
+                log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
+                label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
+                per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
+                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
+                tf.summary.scalar("regular_loss", regular_loss_stu)
+                total_loss = regular_loss_stu
+        elif FLAGS.model_type == "late_fusion":
+            if FLAGS.use_in_batch_neg:
+                tf.logging.info('*****use in batch negatives loss...')
+                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
+                    scores_in_batch = tf.layers.dense(regular_embedding, units=1)  # [bs*num_docs, 1]
+                scores_in_batch = tf.squeeze(scores_in_batch)
+                log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=0)
+                label_ids = tf.cast(label_ids, tf.float32)
+                per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
+                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
+                total_loss = regular_loss_stu
+                tf.summary.scalar("regular_loss", regular_loss_stu)
+            # without in-batch negative
+            else:
+                tf.logging.info('*****use regular loss...')
+                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
+                    scores_in_batch = tf.layers.dense(regular_embedding, units=1)  # [bs*num_docs, 1]
+                scores_in_batch = tf.reshape(scores_in_batch, [FLAGS.train_batch_size, num_docs])
+                log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
+                label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
+                per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
+                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
+                tf.summary.scalar("regular_loss", regular_loss_stu)
+                total_loss = regular_loss_stu
+
         if FLAGS.use_kd_logit_mse:
             tf.logging.info('use mse of logits as distill object...')
             distill_loss_logit_mse = tf.losses.mean_squared_error(logits_teacher, logits_student)
@@ -1154,7 +1182,7 @@ def model_fn_builder(bert_config,
             if FLAGS.use_in_batch_neg:
                 logging_hook = tf.train.LoggingTensorHook(
                     {"score_in_batch": scores_in_batch,
-                     "label_ids_in_batch":label_ids_in_batch},
+                     "label_ids_in_batch": label_ids_in_batch},
                     every_n_iter=1
                 )
             else:
@@ -1402,8 +1430,12 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
     broadcast_ones = tf.ones(
         shape=[batch_size, seq_length_self, 1], dtype=tf.float32)
 
-    mask = broadcast_ones * mask  # [batch_size, seq_length_another, seq_length_self]
+    mask = broadcast_ones * mask  # [batch_size, seq_length_self, seq_length_another]
     return mask
+
+
+def create_att_mask_4d(input_mask_1, input_mask_2):
+    pass
 
 
 def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mask):
@@ -1431,10 +1463,44 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
 
     sub_embedding = tf.abs(embedding1 - embedding2)
-    max_embedding = tf.square(tf.reduce_max([embedding1, embedding2], axis=0))
-    regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, max_embedding], -1)
+    dot_embedding = embedding1 * embedding2
+    regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, dot_embedding], -1)
 
     return regular_embedding
+
+
+def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, num_docs, doc_mask):
+    # query_embeddings: [bs*num_docs, query_len, emb]
+    # doc_embeddings: [bs*num_docs, doc_len, emb]
+    query_embeddings = query_embeddings[::num_docs, :]  # [bs, query_len, emb]
+    emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
+    query2doc_att = tf.einsum('bih,ajh->baij', query_embeddings, doc_embeddings)
+    query2doc_att = tf.multiply(query2doc_att,
+                                1.0 / math.sqrt(float(emb_dim)))
+    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)  # [bs, query_len, doc_len]
+
+    adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
+    query2doc_scores = query2doc_att + adder1
+    query2doc_probs = tf.nn.softmax(query2doc_scores)  # [bs, query_len, doc_len]
+    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)  # [bs,  query_len, emb]
+    embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+
+    doc2query_att = tf.matmul(doc_embeddings, query_embeddings, transpose_b=True)
+    doc2query_att = tf.multiply(doc2query_att,
+                                1.0 / math.sqrt(float(emb_dim)))
+    doc2query_mask = create_att_mask_for2(doc_mask, query_mask)
+    adder2 = (1.0 - tf.cast(doc2query_mask, tf.float32)) * -10000.0
+    doc2query_scores = doc2query_att + adder2
+    doc2query_probs = tf.nn.softmax(doc2query_scores)  # [bs, doc_len, query_len]
+    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)  # [bs,  doc_len, emb]
+    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+
+    sub_embedding = tf.abs(embedding1 - embedding2)
+    dot_embedding = embedding1 * embedding2
+    regular_embedding = tf.concat([embedding1, embedding2, sub_embedding, dot_embedding], -1)
+
+    return regular_embedding
+
 
 
 def create_att_mask(input_mask, seq_length_another):
