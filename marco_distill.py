@@ -1056,7 +1056,7 @@ def model_fn_builder(bert_config,
                     query_embeddings=query_embedding,
                     query_mask=input_mask_sbert_a,
                     doc_embeddings=doc_embedding,
-                    label_ids_in_batch=label_ids,
+                    label_ids=label_ids,
                     num_docs=num_docs,
                     doc_mask=input_mask_sbert_b)
                 total_loss = loss_in_batch
@@ -1492,7 +1492,7 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     return regular_embedding
 
 
-def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, label_ids_in_batch,
+def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, label_ids,
                               num_docs, doc_mask):
     # query_embeddings: [bs*num_docs, query_len, emb]
     # doc_embeddings: [bs*num_docs, doc_len, emb]
@@ -1519,6 +1519,9 @@ def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, labe
     scores_in_batch = tf.reduce_sum(embedding1 * embedding2, axis=-1)
     scores_in_batch = tf.nn.softmax(scores_in_batch, axis=-1)
     log_scores_in_batch = tf.log(scores_in_batch + 1e-7)
+    label_ids = tf.cast(label_ids, dtype=tf.float32)
+    label_ids_in_batch = tf.eye(FLAGS.train_batch_size * num_docs) * tf.expand_dims(label_ids,
+                                                                                    axis=0)  # [bs*num_docs, bs*num_docs]
     label_ids_in_batch = label_ids_in_batch[::num_docs, :]  # [bs, bs*num_docs]
     loss_in_batch = - tf.reduce_mean(tf.reduce_sum(label_ids_in_batch * log_scores_in_batch, axis=-1))
 
