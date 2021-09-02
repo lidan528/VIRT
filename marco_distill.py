@@ -853,7 +853,7 @@ def model_fn_builder(bert_config,
             cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
             cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
 
-            label_ids = tf.constant([1] + [0]*FLAGS.num_negatives, dtype=tf.int32)
+            label_ids = tf.constant([1] + [1]*FLAGS.num_negatives, dtype=tf.int32)
             label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
 
             # label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
