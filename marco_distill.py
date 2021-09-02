@@ -1073,7 +1073,7 @@ def model_fn_builder(bert_config,
                 # tf.summary.scalar("regular_loss", regular_loss_stu)
                 # total_loss = regular_loss_stu
                 with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    logits_student = tf.layers.dense(regular_embedding, units=1)
+                    logits_student = tf.layers.dense(regular_embedding, units=2)
                 probabilities_student = tf.nn.softmax(logits_student)
                 log_probs_student = tf.nn.log_softmax(logits_student)
                 one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
