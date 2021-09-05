@@ -26,7 +26,7 @@ flags.DEFINE_integer("topk", 1000, "topk.")
 
 
 def read_embedding(emb_file):
-    with open(emb_file) as f:
+    with open(emb_file, 'rb') as f:
         try:
             while True:
                 ex = pickle.load(f)
