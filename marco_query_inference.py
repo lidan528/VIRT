@@ -47,12 +47,12 @@ flags.DEFINE_string(
     "for the task.")
 
 flags.DEFINE_string(
-    "eval_data_path", None,
+    "eval_data_dir", None,
     "The input data path. Should contain the .tsv files (or other data files) "
     "for the task.")
 
 flags.DEFINE_string(
-    "predict_data_path", None,
+    "predict_data_dir", None,
     "The input data path. Should contain the .tsv files (or other data files) "
     "for the task.")
 
