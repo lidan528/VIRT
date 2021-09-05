@@ -736,7 +736,7 @@ def main(_):
         output_predict_file = os.path.join(FLAGS.output_dir, FLAGS.output_filename)
         past_step = 0
 
-        with tf.gfile.GFile(output_predict_file, "w") as f:
+        with tf.gfile.GFile(output_predict_file, "wb") as f:
             tf.logging.info("***** Predict results *****")
             for prediction in estimator.predict(input_fn=predict_input_fn):
                 past_step += 1
