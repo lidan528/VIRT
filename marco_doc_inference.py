@@ -729,7 +729,7 @@ def main(_):
         tf.logging.info("***** Running prediction*****")
         predict_input_fn = file_based_input_fn_builder(
             input_file=doc_predict_file,
-            seq_length_query=FLAGS.max_seq_length_doc,
+            seq_length_doc=FLAGS.max_seq_length_doc,
             is_training=False,
             drop_remainder=False)
 
