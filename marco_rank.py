@@ -1,7 +1,7 @@
 import tensorflow as tf
 import pickle
 import numpy as np
-import heapq
+import time
 
 flags = tf.flags
 
@@ -67,10 +67,16 @@ def read_doc_embedding(emb_file):
 def rank_doc(query_emb_file, doc_emb_files):
     all_top_doc_scores = None
     all_top_doc_ids = None
+    a = time.time()
     query_ids, query_emb = read_query_embedding(query_emb_file)
+    b = time.time()
+    print(f"load query embedding in {b - a}")
     processed_doc_num = 0
     for doc_emb_file in doc_emb_files:
+        a = time.time()
         for doc_ids, doc_emb in read_doc_embedding(doc_emb_file):
+            b = time.time()
+            print(f"load query embedding in {b - a}")
             doc_scores = np.matmul(query_emb, doc_emb.T)
             processed_doc_num += len(doc_emb)
             if processed_doc_num % FLAGS.batch_size == 0:
@@ -86,6 +92,7 @@ def rank_doc(query_emb_file, doc_emb_files):
                 top_doc_indices = np.argsort(all_top_doc_scores, axis=-1)[:, :FLAGS.topk]
                 all_top_doc_ids = all_top_doc_ids[np.arange(len(all_top_doc_ids))[:, np.newaxis], top_doc_indices]
                 all_top_doc_scores = all_top_doc_scores[np.arange(len(all_top_doc_scores))[:, np.newaxis], top_doc_indices]
+            a = time.time()
 
     return all_top_doc_ids, query_ids
 
