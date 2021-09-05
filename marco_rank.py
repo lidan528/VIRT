@@ -76,7 +76,7 @@ def rank_doc(query_emb_file, doc_emb_files):
         a = time.time()
         for doc_ids, doc_emb in read_doc_embedding(doc_emb_file):
             b = time.time()
-            print(f"load query embedding in {b - a}")
+            print(f"load one batch doc embedding in {b - a}")
             doc_scores = np.matmul(query_emb, doc_emb.T)
             processed_doc_num += len(doc_emb)
             if processed_doc_num % FLAGS.batch_size == 0:
