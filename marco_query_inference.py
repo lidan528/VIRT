@@ -804,24 +804,25 @@ def main(_):
         predict_batch_size=FLAGS.predict_batch_size)
 
     if FLAGS.do_predict:
-        query_predict_file = tf.io.gfile.glob(FLAGS.predict_data_dir)
-        tf.logging.info("***** Running prediction*****")
-        predict_input_fn = file_based_input_fn_builder(
-            input_file=query_predict_file,
-            seq_length_query=FLAGS.max_seq_length_query,
-            is_training=False,
-            drop_remainder=False)
+        query_predict_files = tf.io.gfile.glob(FLAGS.predict_data_dir)
+        for i, query_predict_file in enumerate(query_predict_files):
+            tf.logging.info("***** Running prediction*****")
+            predict_input_fn = file_based_input_fn_builder(
+                input_file=query_predict_file,
+                seq_length_query=FLAGS.max_seq_length_query,
+                is_training=False,
+                drop_remainder=False)
 
-        output_predict_file = os.path.join(FLAGS.output_dir, FLAGS.output_filename)
-        past_step = 0
+            output_predict_file = os.path.join(FLAGS.output_dir, FLAGS.output_filename + f".{i}")
+            past_step = 0
 
-        with tf.gfile.GFile(output_predict_file, "wb") as f:
-            tf.logging.info("***** Predict results *****")
-            for prediction in estimator.predict(input_fn=predict_input_fn):
-                past_step += 1
-                if past_step % FLAGS.log_step_count_steps == 0:
-                    tf.logging.info(f"predict {past_step} instances already.")
-                pickle.dump(prediction, f)
+            with tf.gfile.GFile(output_predict_file, "wb") as f:
+                tf.logging.info("***** Predict results *****")
+                for prediction in estimator.predict(input_fn=predict_input_fn):
+                    past_step += 1
+                    if past_step % FLAGS.log_step_count_steps == 0:
+                        tf.logging.info(f"predict {past_step} instances already.")
+                    pickle.dump(prediction, f)
 
 
 if __name__ == "__main__":
