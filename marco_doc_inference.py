@@ -292,7 +292,7 @@ class InputFeatures(object):
         self.label_id = label_id
 
 
-def file_based_input_fn_builder(input_file, seq_length_query,
+def file_based_input_fn_builder(input_file, seq_length_doc,
                                 is_training,
                                 drop_remainder):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
@@ -729,7 +729,7 @@ def main(_):
         tf.logging.info("***** Running prediction*****")
         predict_input_fn = file_based_input_fn_builder(
             input_file=doc_predict_file,
-            seq_length_query=FLAGS.max_seq_length_query,
+            seq_length_query=FLAGS.max_seq_length_doc,
             is_training=False,
             drop_remainder=False)
 
