@@ -135,6 +135,7 @@ class DocExample(object):
         self.doc_tokens = doc_tokens
         self.doc_segment_ids = doc_segment_ids
 
+
 class QueryExample(object):
     def __init__(self, query_id, query_tokens, query_segment_ids):
         self.query_id = query_id
@@ -172,26 +173,6 @@ def read_query_data(query_file):
         query_id, query = convert_to_unicode(line).strip().split('\t')
         query_data[query_id] = query
     return query_data
-
-
-def _data_generate(doc_data, query_data, id_file):
-    line_no = 0
-    train_data = []
-    # header
-    while True:
-        line = convert_to_unicode(id_file.readline())
-        if not line:
-            break
-        line_no += 1
-        qid, pid, nids = line.strip().split('\t')
-        nids = nids.split(',')
-        train_data.append({
-            "qid": qid,
-            "query": query_data[qid],
-            "positive_docs": [doc_data[pid]],
-            "negative_docs": [doc_data[nid] for nid in nids[:4]]  # truncate negative docs
-        })
-    return train_data
 
 
 def create_query_examples(query_data, max_query_length, tokenizer):

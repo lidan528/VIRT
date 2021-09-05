@@ -241,6 +241,9 @@ tf.flags.DEFINE_string(
     "which model to use"
 )
 
+flags.DEFINE_integer("log_step_count_steps", 10000, "")
+
+
 # tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
 
 flags.DEFINE_integer("colbert_dim", 128, "reduction dimension of colbert")
@@ -480,7 +483,7 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
     return feature
 
 
-def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
+def file_based_input_fn_builder(input_file, seq_length_query,
                                 is_training,
                                 drop_remainder):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
@@ -488,15 +491,7 @@ def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
     name_to_features = {
         "query_ids": tf.FixedLenFeature([seq_length_query], tf.int64),
         "query_masks": tf.FixedLenFeature([seq_length_query], tf.int64),
-        "query_segment_ids": tf.FixedLenFeature([seq_length_query], tf.int64),
-
-        "positive_doc_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
-        "positive_doc_segment_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
-        "positive_doc_masks": tf.FixedLenFeature([seq_length_doc], tf.int64),
-
-        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
+        "query_segment_ids": tf.FixedLenFeature([seq_length_query], tf.int64)
     }
 
     def _decode_record(record, name_to_features):
@@ -789,10 +784,7 @@ def create_model_dipair(bi_layer_num, cross_layer_num, bert_config, is_training,
 
 
 def model_fn_builder(bert_config,
-                     num_rele_label,
-                     init_checkpoint_teacher, init_checkpoint_student,
-                     learning_rate,
-                     num_train_steps, num_warmup_steps, use_tpu,
+                     init_checkpoint_student,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
 
@@ -805,63 +797,14 @@ def model_fn_builder(bert_config,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
-            query_ids = features["query_ids"]
-            query_segment_ids = features["query_segment_ids"]
-            query_masks = features["query_masks"]
+        query_ids = features["query_ids"]
+        query_segment_ids = features["query_segment_ids"]
+        query_masks = features["query_masks"]
+        query_guid = features["query_guid"]
 
-            positive_doc_ids = features["positive_doc_ids"]
-            positive_doc_segment_ids = features["positive_doc_segment_ids"]
-            positive_doc_masks = features["positive_doc_masks"]
-
-            negative_doc_ids = features["negative_doc_ids"]
-            negative_doc_segment_ids = features["negative_doc_segment_ids"]
-            negative_doc_masks = features["negative_doc_masks"]
-
-            # tile query_ids,query_segment_ids,query_masks
-            num_docs = FLAGS.num_negatives + 1
-
-            # input_ids_sbert_a = query_ids
-            # input_mask_sbert_a = query_masks
-            # segment_ids_sbert_a = query_segment_ids
-
-            # input_ids_sbert_b = positive_doc_ids
-            # input_mask_sbert_b = positive_doc_masks
-            # segment_ids_sbert_b = positive_doc_segment_ids
-
-            # negative_doc_ids = tf.reshape(negative_doc_ids,
-            #                               [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            # negative_doc_segment_ids = tf.reshape(negative_doc_segment_ids,
-            #                                       [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            # negative_doc_masks = tf.reshape(negative_doc_masks,
-            #                                 [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            negative_doc_ids = negative_doc_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_masks = negative_doc_masks[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_segment_ids = negative_doc_segment_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-
-            input_ids_sbert_b = tf.reshape(tf.concat([positive_doc_ids, negative_doc_ids], axis=1),
-                                           [FLAGS.train_batch_size * num_docs, -1])
-            input_mask_sbert_b = tf.reshape(tf.concat([positive_doc_masks, negative_doc_masks], axis=1),
-                                            [FLAGS.train_batch_size * num_docs, -1])
-            segment_ids_sbert_b = tf.reshape(tf.concat([positive_doc_segment_ids, negative_doc_segment_ids], axis=1),
-                                             [FLAGS.train_batch_size * num_docs, -1])
-
-            # create cross model input
-            input_ids_sbert_a = tf.tile(query_ids, tf.constant([1, num_docs]))
-            input_ids_sbert_a = tf.reshape(input_ids_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-            segment_ids_sbert_a = tf.tile(query_segment_ids, tf.constant([1, num_docs]))
-            segment_ids_sbert_a = tf.reshape(segment_ids_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-            input_mask_sbert_a = tf.tile(query_masks, tf.constant([1, num_docs]))
-            input_mask_sbert_a = tf.reshape(input_mask_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-
-            cross_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_b[:, 1:]], axis=1)
-            cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
-            cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
-
-            label_ids = tf.constant([1] + [0] * FLAGS.num_negatives, dtype=tf.int32)
-            label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
-
-            # label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
+        input_ids_sbert_a = query_ids
+        input_mask_sbert_a = query_masks
+        segment_ids_sbert_a = query_segment_ids
 
         if FLAGS.model_type == 'poly':
             tf.logging.info("*********** use poly encoder as the model backbone...*******************")
@@ -873,70 +816,6 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=True)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=False)
-            regular_embedding = poly_encoder(query_embedding, doc_embedding, input_mask_sbert_b, bert_config)
-
-        elif FLAGS.model_type == 'deformer':
-            tf.logging.info("*********** use deformer as the model backbone...*******************")
-            regular_embedding, model_stu_query, model_stu_doc = create_model_Deformer(bi_layer_num=11,
-                                                                                      cross_layer_num=1,
-                                                                                      bert_config=bert_config,
-                                                                                      is_training=is_training,
-                                                                                      input_ids_a=input_ids_sbert_a,
-                                                                                      input_mask_a=input_mask_sbert_a,
-                                                                                      segment_ids_a=segment_ids_sbert_a,
-                                                                                      input_ids_b=input_ids_sbert_b,
-                                                                                      input_mask_b=input_mask_sbert_b,
-                                                                                      segment_ids_b=segment_ids_sbert_b,
-                                                                                      use_one_hot_embeddings=use_one_hot_embeddings)
-
-        elif FLAGS.model_type == 'dipair':
-            tf.logging.info("*********** use dipair as the model backbone...*******************")
-            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=11,
-                                                                                    cross_layer_num=1,
-                                                                                    bert_config=bert_config,
-                                                                                    is_training=is_training,
-                                                                                    input_ids_a=input_ids_sbert_a,
-                                                                                    input_mask_a=input_mask_sbert_a,
-                                                                                    segment_ids_a=segment_ids_sbert_a,
-                                                                                    input_ids_b=input_ids_sbert_b,
-                                                                                    input_mask_b=input_mask_sbert_b,
-                                                                                    segment_ids_b=segment_ids_sbert_b,
-                                                                                    use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                                    first_m=8,
-                                                                                    first_n=16)
-
-        elif FLAGS.model_type == 'col':
-            tf.logging.info("*********** use colbert as the model backbone...*******************")
-            query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                                  input_ids=input_ids_sbert_a,
-                                                                  input_mask=input_mask_sbert_a,
-                                                                  segment_ids=segment_ids_sbert_a,
-                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                  scope="bert_student",
-                                                                  is_reuse=tf.AUTO_REUSE,
-                                                                  pooling=False)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=False)
-            logits_student, probabilities_student, log_probs_student = col_bert(query_embedding=query_embedding,
-                                                                                doc_embedding=doc_embedding,
-                                                                                input_mask_a=input_mask_sbert_a,
-                                                                                input_mask_b=input_mask_sbert_b,
-                                                                                num_rele_label=num_rele_label,
-                                                                                bert_config=bert_config)
 
         elif FLAGS.model_type == 'late_fusion':
             tf.logging.info("*********** use late fusion as the model backbone...*******************")
@@ -948,16 +827,6 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=False)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=False)
-            regular_embedding = newly_late_interaction(query_embedding, input_mask_sbert_a, doc_embedding,
-                                                       input_mask_sbert_b)
 
         else:
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
@@ -968,205 +837,8 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=True)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=True)
-            if FLAGS.model_type == 'sbert':
-                tf.logging.info("*********** use sbert as the model backbone...*******************")
-                sub_embedding = tf.abs(query_embedding - doc_embedding)
-                max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
-                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
-            elif FLAGS.model_type == 'bi_encoder':
-                tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
-                sub_embedding = tf.abs(query_embedding - doc_embedding)
-                dot_embedding = query_embedding * doc_embedding
-                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, dot_embedding], -1)
-
-        # if FLAGS.model_type != 'col':
-        #     if FLAGS.use_resnet_predict:
-        #         tf.logging.info("*************use resnet in prediction..************************")
-        #         logits_student, probabilities_student, log_probs_student = \
-        #             get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
-        #     else:
-        #         logits_student, probabilities_student, log_probs_student = \
-        #             get_prediction_student(student_output_layer=regular_embedding,
-        #                                    num_labels=num_rele_label,
-        #                                    is_training=is_training)
 
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
-
-        teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
-                                                                input_ids=cross_input_ids,
-                                                                input_mask=cross_input_masks,
-                                                                segment_ids=cross_segment_ids,
-                                                                use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                scope="bert_teacher",
-                                                                is_reuse=tf.AUTO_REUSE)
-        loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-            get_prediction_teacher(teacher_output_layer=teacher_output_layer,
-                                   num_labels=num_rele_label,
-                                   labels=label_ids,
-                                   is_training=False)
-
-        vars_teacher = tf.trainable_variables()  # stu + teacher
-        for var_ in vars_student:
-            vars_teacher.remove(var_)
-
-        # in-batch negative loss....
-        if FLAGS.model_type == "bi_encoder":
-            if FLAGS.use_in_batch_neg:
-                tf.logging.info('*****use in batch negatives loss...')
-                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(
-                    query_embedding=query_embedding,
-                    doc_embedding=doc_embedding,
-                    label_ids=label_ids,
-                    num_docs=num_docs)
-                total_loss = loss_in_batch
-                tf.summary.scalar("regular_loss", loss_in_batch)
-            # without in-batch negative
-            else:
-                # tf.logging.info('*****use regular loss...')
-                # doc_embedding = tf.reshape(doc_embedding, [FLAGS.train_batch_size, num_docs, -1])
-                # scores_in_batch = tf.einsum('bh,bih->bi', query_embedding, doc_embedding)
-                # log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
-                # label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
-                # per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
-                # regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                # tf.summary.scalar("regular_loss", regular_loss_stu)
-                # total_loss = regular_loss_stu
-                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    logits_student = tf.layers.dense(regular_embedding, units=2)
-                probabilities_student = tf.nn.softmax(logits_student)
-                log_probs_student = tf.nn.log_softmax(logits_student)
-                one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-                per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                tf.summary.scalar("regular_loss", regular_loss_stu)
-                total_loss = regular_loss_stu
-
-        elif FLAGS.model_type == "late_fusion":
-            if FLAGS.use_in_batch_neg:
-                tf.logging.info('*****use in batch negatives loss...')
-                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_late_interaction(
-                    query_embeddings=query_embedding,
-                    query_mask=input_mask_sbert_a,
-                    doc_embeddings=doc_embedding,
-                    label_ids=label_ids,
-                    num_docs=num_docs,
-                    doc_mask=input_mask_sbert_b)
-                total_loss = loss_in_batch
-                tf.summary.scalar("regular_loss", loss_in_batch)
-            # without in-batch negative
-            else:
-                tf.logging.info('*****use regular loss...')
-                # with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                #     scores_in_batch = tf.layers.dense(regular_embedding, units=1)  # [bs*num_docs, 1]
-                # scores_in_batch = tf.reshape(scores_in_batch, [FLAGS.train_batch_size, num_docs])
-                # log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
-                # label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
-                # per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
-                # regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                # tf.summary.scalar("regular_loss", regular_loss_stu)
-                # total_loss = regular_loss_stu
-                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    logits_student = tf.layers.dense(regular_embedding, units=2)
-                probabilities_student = tf.nn.softmax(logits_student)
-                log_probs_student = tf.nn.log_softmax(logits_student)
-                one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-                per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                tf.summary.scalar("regular_loss", regular_loss_stu)
-                total_loss = regular_loss_stu
-
-        if FLAGS.use_kd_logit_mse:
-            tf.logging.info('use mse of logits as distill object...')
-            distill_loss_logit_mse = tf.losses.mean_squared_error(logits_teacher, logits_student)
-            scaled_logit_loss = FLAGS.kd_weight_logit * distill_loss_logit_mse
-            total_loss = regular_loss_stu + scaled_logit_loss
-            tf.summary.scalar("logit_loss_mse", distill_loss_logit_mse)
-            tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
-        elif FLAGS.use_kd_logit_kl:
-            tf.logging.info('use KL- of logits as distill object...')
-            t_value_distribution = tf.distributions.Categorical(probs=probabilities_teacher + 1e-5)
-            s_value_distribution = tf.distributions.Categorical(probs=probabilities_student + 1e-5)
-            per_example_loss_kl = tf.distributions.kl_divergence(t_value_distribution, s_value_distribution)
-            # per_example_loss_kl = per_example_loss_kl * label_mask
-            distill_loss_logit_kl = tf.reduce_mean(per_example_loss_kl)
-            scaled_logit_loss = FLAGS.kd_weight_logit * distill_loss_logit_kl
-            total_loss = regular_loss_stu + scaled_logit_loss
-            tf.summary.scalar("logit_loss_kl", distill_loss_logit_kl)
-            tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
-
-        ## attention loss
-        if FLAGS.use_kd_att:
-            tf.logging.info('use att as distill object...')
-            distill_loss_att = get_attention_loss(model_student_query=model_stu_query,
-                                                  model_student_doc=model_stu_doc,
-                                                  model_teacher=model_teacher,
-                                                  input_mask_sbert_query=input_mask_sbert_a,
-                                                  input_mask_sbert_doc=input_mask_sbert_b)
-            scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
-            total_loss = total_loss + scaled_att_loss
-            tf.summary.scalar("att_loss", distill_loss_att)
-            tf.summary.scalar("att_loss_scaled", scaled_att_loss)
-
-        ## hidden h distill
-        if FLAGS.use_layer_distill:
-            tf.logging.info('*****use hidden layer as distill object...')
-            distill_hidden_loss = get_pooled_loss(teacher_model=model_teacher,
-                                                  student_model_query=model_stu_query,
-                                                  student_model_doc=model_stu_doc,
-                                                  input_mask_teacher=cross_input_masks,
-                                                  input_mask_query=input_mask_sbert_a,
-                                                  input_mask_doc=input_ids_sbert_b,
-                                                  mode=FLAGS.layer_distill_mode)
-            scaled_hidden_loss = distill_hidden_loss * FLAGS.kd_weight_layer
-            total_loss = total_loss + scaled_hidden_loss
-            tf.summary.scalar("hidden_loss", distill_hidden_loss)
-            tf.summary.scalar("hidden_loss_scaled", scaled_hidden_loss)
-
-        # contrast loss self....
-        if FLAGS.use_contrast_self:
-            tf.logging.info('*****use contrast loss self...')
-            distill_contrast_loss = contrastive_loss_self(teacher_model=model_teacher,
-                                                          query_model=model_stu_query,
-                                                          doc_model=model_stu_doc,
-                                                          input_mask_teacher=cross_input_masks,
-                                                          input_mask_query=input_mask_sbert_a,
-                                                          input_mask_doc=input_ids_sbert_b,
-                                                          truth_labels=label_ids)
-            scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
-            total_loss = total_loss + scaled_contrast_loss
-            tf.summary.scalar("contrast_loss_self", distill_contrast_loss)
-            tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
-
-        # contrast loss teacher....
-        if FLAGS.use_contrast_teacher_separately:
-            tf.logging.info('*****use contrast loss teacher...')
-            distill_contrast_loss = contrastive_loss_teacher_separately(teacher_model=model_teacher,
-                                                                        query_model=model_stu_query,
-                                                                        doc_model=model_stu_doc,
-                                                                        input_mask_teacher=cross_input_masks,
-                                                                        input_mask_query=input_mask_sbert_a,
-                                                                        input_mask_doc=input_ids_sbert_b,
-                                                                        truth_labels=label_ids)
-            scaled_contrast_loss = distill_contrast_loss * FLAGS.weight_contrast
-            total_loss = total_loss + scaled_contrast_loss
-            tf.summary.scalar("contrast_loss_teacher", distill_contrast_loss)
-            tf.summary.scalar("contrast_loss_scaled", scaled_contrast_loss)
-
-        # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
-        # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
-        assignment_map_teacher, initialized_variable_names_teacher = \
-            modeling.get_assignment_map_from_checkpoint_teacher(
-                vars_teacher, init_checkpoint_teacher
-            )
-        tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
 
         assignment_map_student, initialized_variable_names_student = \
             modeling.get_assignment_map_from_checkpoint_student(
@@ -1174,84 +846,17 @@ def model_fn_builder(bert_config,
             )
         tf.train.init_from_checkpoint(init_checkpoint_student, assignment_map_student)
 
-        tf.logging.info('****-------------------------init teacher----------------------*****')
-        for v_t in assignment_map_teacher:
-            tf.logging.info(
-                '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t], v_t))
-        tf.logging.info('--------------------------------------------------------------------')
-
         tf.logging.info('****-------------------------init student----------------------*****')
         for v_s in assignment_map_student:
             tf.logging.info(
                 '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
         tf.logging.info('--------------------------------------------------------------------')
 
-        #
-        # tvars = tf.trainable_variables()
-        #
-        # tf.logging.info("**** Trainable Variables ****")
-        # for var in tvars:
-        #     init_string = ""
-        #     if var.name in initialized_variable_names:
-        #         init_string = ", *INIT_FROM_CKPT*"
-        #     tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
-        #                     init_string)
-        output_spec = None
-        if mode == tf.estimator.ModeKeys.TRAIN:
+        output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            mode=mode,
+            predictions={"query_embedding": query_embedding, "query_guid": query_guid},
+            scaffold_fn=None)
 
-            train_op = optimization.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            if FLAGS.use_in_batch_neg:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"score_in_batch": scores_in_batch},
-                    every_n_iter=1
-                )
-            else:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"probabilities": probabilities_student},
-                    every_n_iter=1
-                )
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode,
-                loss=total_loss,
-                train_op=train_op,
-                training_hooks=[logging_hook],
-                scaffold_fn=None)
-        elif mode == tf.estimator.ModeKeys.EVAL:
-
-            def metric_fn(per_example_loss, label_ids, probabilities, probabilities_teacher):
-                predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
-                predictions_teacher = tf.argmax(probabilities_teacher, axis=-1, output_type=tf.int32)
-                accuracy = tf.metrics.accuracy(label_ids, predictions)
-                accuracy_teacher = tf.metrics.accuracy(label_ids, predictions_teacher)
-                precision = tf.metrics.precision(label_ids, predictions)
-                recall = tf.metrics.recall(label_ids, predictions)
-                # f1 = tf.metrics.f1(label_ids, predictions, num_rele_label, [1], average="macro")
-
-                # get positive score for auc
-                auc = tf.metrics.auc(label_ids, probabilities[:, -1])
-
-                # loss = tf.metrics.mean(per_example_loss)
-                return {
-                    "eval_pre": precision,
-                    "eval_rec": recall,
-                    #   "eval_f1": f1,
-                    "eval_accuracy": accuracy,
-                    "eval_accuracy_teacher": accuracy_teacher,
-                    "eval_auc": auc,
-                }
-
-            eval_metrics = (metric_fn, [total_loss, label_ids, probabilities_student, probabilities_teacher])
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode,
-                loss=total_loss,
-                eval_metrics=eval_metrics,
-                scaffold_fn=None)
-        else:
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode,
-                predictions=query_embedding,
-                scaffold_fn=None)
         return output_spec
 
     return model_fn
@@ -1841,46 +1446,6 @@ def contrastive_loss_self(teacher_model, query_model, doc_model,
     return -1 * loss / cnt
 
 
-def contrastive_loss_teacher_separately(teacher_model, query_model, doc_model,
-                                        input_mask_teacher, input_mask_query, input_mask_doc,
-                                        truth_labels):
-    """
-    teacher半段以query为正例，以同batch其他query内为负例;  后半段类似
-        q1, q2, q3
-    t1  *
-    t2      *
-    t3          *
-    """
-    all_teacher_layers, all_query_layers, all_doc_layers = \
-        teacher_model.all_encoder_layers, \
-        query_model.all_encoder_layers, \
-        doc_model.all_encoder_layers
-    loss, cnt = 0, 0
-    for teacher_layer, query_layer, doc_layer in zip(all_teacher_layers, all_query_layers, all_doc_layers):
-        pooled_query_layer = get_pooled_embeddings(query_layer[:, 1:-1, :], input_mask_query[:, 1:-1])  # [bs, emb_dim]
-        pooled_doc_layer = get_pooled_embeddings(doc_layer[:, 1:-1, :], input_mask_doc[:, 1:-1])  # [bs, emb_dim]
-
-        query_length = modeling.get_shape_list(query_layer, expected_rank=3)[1]  # [bs, query_len, emb_dim]
-        # doc_length = modeling.get_shape_list(doc_layer, expected_rank=3)[1]
-        teacher_query = get_pooled_embeddings(teacher_layer[:, 1:query_length - 1, :],
-                                              input_mask_teacher[:, 1:query_length - 1])
-        teacher_doc = get_pooled_embeddings(teacher_layer[:, query_length:-1, :],
-                                            input_mask_teacher[:, query_length:-1])
-
-        loss_query = cos_sim_loss_for_contrast(teacher_query, pooled_query_layer)
-        loss_doc = cos_sim_loss_for_contrast(teacher_doc, pooled_doc_layer)
-        loss += (loss_query + loss_doc) / 2.0
-        cnt += 1
-    return -1 * loss / cnt
-
-
-def kl(p, q):
-    """
-    计算kl散度
-    """
-    p_q = p / q
-
-
 def serving_input_receiver_fn(max_seq_length):
     input_ids_a = tf.placeholder(dtype=tf.int32, shape=[None, max_seq_length], name="input_ids_a")
     # input_ids_b = tf.placeholder(dtype=tf.int32, shape=[None, max_seq_length], name="input_ids_b")
@@ -1909,11 +1474,6 @@ def main(_):
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
-    label_list = [0, 1]
-
-    tokenizer = tokenization.FullTokenizer(
-        vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
-
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
         tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -1931,22 +1491,9 @@ def main(_):
             num_shards=FLAGS.num_tpu_cores,
             per_host_input_for_training=is_per_host))
 
-    train_examples = None
-    num_train_steps = None
-    num_warmup_steps = None
-    if FLAGS.do_train:
-        num_train_steps = int(FLAGS.num_train_steps)
-        num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
-
     model_fn = model_fn_builder(
         bert_config=bert_config,
-        num_rele_label=len(label_list),
-        init_checkpoint_teacher=FLAGS.init_checkpoint_teacher,
         init_checkpoint_student=FLAGS.init_checkpoint_student,
-        learning_rate=FLAGS.learning_rate,
-        num_train_steps=num_train_steps,
-        num_warmup_steps=num_warmup_steps,
-        use_tpu=FLAGS.use_tpu,
         use_one_hot_embeddings=FLAGS.use_tpu)
 
     # # If TPU is not available, this will fall back to normal Estimator on CPU
@@ -1959,147 +1506,25 @@ def main(_):
         eval_batch_size=FLAGS.eval_batch_size,
         predict_batch_size=FLAGS.predict_batch_size)
 
-    # def file_based_convert_examples_to_features(
-    #         examples, ner_label_map, label_list, max_seq_length, tokenizer, output_file, is_training=False):
-
-    if FLAGS.do_train:
-        train_file = tf.io.gfile.glob(FLAGS.train_data_dir)
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-        tf.logging.info("  Num steps = %d", num_train_steps)
-        train_input_fn = file_based_input_fn_builder(
-            input_file=train_file,
-            seq_length_query=FLAGS.max_seq_length_query,
-            seq_length_doc=FLAGS.max_seq_length_doc,
-            is_training=True,
-            drop_remainder=True)
-        estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-
-    if FLAGS.do_eval:
-        eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-        eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
-
-        if not tf.gfile.Exists(eval_file):
-            file_based_convert_examples_to_features(
-                eval_examples, label_list, FLAGS.max_seq_length_query, FLAGS.max_seq_length_doc,
-                tokenizer, eval_file)
-        else:
-            print("eval file exists")
-
-        tf.logging.info("***** Running evaluation *****")
-        tf.logging.info("  Num examples = %d", len(eval_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
-
-        # This tells the estimator to run through the entire set.
-        eval_steps = None
-        # However, if running eval on the TPU, you will need to specify the
-        # number of steps.
-        if FLAGS.use_tpu:
-            # Eval will be slightly WRONG on the TPU because it will truncate
-            # the last batch.
-            eval_steps = int(len(eval_examples) / FLAGS.eval_batch_size)
-
-        eval_drop_remainder = True if FLAGS.use_tpu else False
-        eval_input_fn = file_based_input_fn_builder(
-            input_file=eval_file,
-            seq_length_query=FLAGS.max_seq_length_query,
-            seq_length_doc=FLAGS.max_seq_length_doc,
-            is_training=False,
-            drop_remainder=eval_drop_remainder)
-
-        steps_and_files = []
-        filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
-        for file in filenames:
-            if file.endswith(".index"):
-                ckpt_name = file[:-6]
-                cur_filename = os.path.join(FLAGS.output_dir, ckpt_name)
-                global_step = int(cur_filename.split("-")[-1])
-                steps_and_files.append((global_step, cur_filename))
-                tf.logging.info("add {} to eval list...".format(cur_filename))
-
-        steps_and_files = sorted(steps_and_files, key=lambda x: x[0])
-
-        best_metric, best_ckpt = 0, ''
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.gfile.GFile(output_eval_file, "w") as writer:
-            for global_step, filename in steps_and_files:
-                result = estimator.evaluate(input_fn=eval_input_fn,
-                                            # steps=eval_steps)
-                                            checkpoint_path=filename)
-                cur_acc = result["eval_accuracy"]
-                if cur_acc > best_metric:
-                    best_metric = cur_acc
-                    best_ckpt = filename
-                tf.logging.info("***** Eval results of step-{} *****".format(global_step))
-                writer.write("***** Eval results of step-{} *****".format(global_step))
-                for key in sorted(result.keys()):
-                    if key.startswith("eval"):
-                        tf.logging.info("  %s = %s", key, str(result[key]))
-                        writer.write("%s = %s\n" % (key, str(result[key])))
-
-        tf.logging.info("*****Best eval results: {} from {}  *****".format(best_metric, best_ckpt))
-
-        # pre = result["eval_pre"]
-        # rec = result["eval_rec"]
-        # if pre == 0 and rec == 0:
-        #     fscore = 0
-        # else:
-        #     fscore = 2 * pre * rec / (pre + rec)
-        # writer.write("%s = %s\n" % ("eval_fscore", str(fscore)))
-
     if FLAGS.do_predict:
-        predict_examples = processor.get_test_examples(FLAGS.data_dir, FLAGS.test_flie_name)
-        predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
-
-        if not tf.gfile.Exists(predict_file):
-            file_based_convert_examples_to_features(predict_examples, label_list,
-                                                    FLAGS.max_seq_length_query, FLAGS.max_seq_length_doc,
-                                                    tokenizer,
-                                                    predict_file)
-        else:
-            print("predict file Exists")
-
+        query_predict_file = tf.io.gfile.glob(FLAGS.predict_data_dir)
         tf.logging.info("***** Running prediction*****")
-        tf.logging.info("  Num examples = %d", len(predict_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
-
-        if FLAGS.use_tpu:
-            # Warning: According to tpu_estimator.py Prediction on TPU is an
-            # experimental feature and hence not supported here
-            raise ValueError("Prediction in TPU not supported")
-
-        predict_drop_remainder = True if FLAGS.use_tpu else False
         predict_input_fn = file_based_input_fn_builder(
-            input_file=predict_file,
+            input_file=query_predict_file,
             seq_length_query=FLAGS.max_seq_length_query,
-            seq_length_doc=FLAGS.max_seq_length_doc,
             is_training=False,
-            drop_remainder=predict_drop_remainder)
+            drop_remainder=False)
 
-        eval_steps = None
-        # test_result = estimator.evaluate(input_fn=predict_input_fn, steps=eval_steps)
-        # output_test_file = os.path.join(FLAGS.output_dir, "test_results.txt")
-        # with tf.gfile.GFile(output_test_file, "w") as writer:
-        # tf.logging.info("***** test results *****")
-        # for key in sorted(test_result.keys()):
-        # tf.logging.info("  %s = %s", key, str(test_result[key]))
-        # writer.write("%s = %s\n" % (key, str(test_result[key])))
+        output_predict_file = os.path.join(FLAGS.output_dir, FLAGS.output_filename)
+        past_step = 0
 
-        result = estimator.predict(input_fn=predict_input_fn)
-
-        output_predict_file = os.path.join(FLAGS.output_dir, "predict_results.tsv")
-        with tf.gfile.GFile(output_predict_file, "w") as writer:
+        with tf.gfile.GFile(output_predict_file, "w") as f:
             tf.logging.info("***** Predict results *****")
-            for prediction in result:
-                # output_line = str(prediction[1]) + "\n"
-                output_line = ",".join(str(class_probability) for class_probability in prediction) + "\n"
-                writer.write(output_line)
-
-    if FLAGS.do_save:
-        estimator._export_to_tpu = False
-        estimator.export_savedmodel(FLAGS.output_dir,
-                                    serving_input_receiver_fn=serving_input_receiver_fn(FLAGS.max_seq_length))
-        tf.logging.info("******* Done for exporting pb file***********")
+            for prediction in estimator.predict(input_fn=predict_input_fn):
+                past_step += 1
+                if past_step % FLAGS.log_step_count_steps == 0:
+                    tf.logging.info(f"predict {past_step} instances already.")
+                pickle.dump(prediction, f)
 
 
 if __name__ == "__main__":
