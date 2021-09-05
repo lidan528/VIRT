@@ -507,7 +507,6 @@ def process(FLAGS, tokenizer):
                 tf.logging.info("  %s", output_file)
             write_query_example_to_tfr_files(query_examples, tokenizer, FLAGS.max_query_length, output_files)
 
-
         print("end process file:" + file_name_input + " " + "result file:" + file_name_output)
 
     return _process
