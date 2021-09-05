@@ -12,6 +12,7 @@ def init_flags():
     parser.add_argument("output_dir", type=str, default=None)
     parser.add_argument("batch_size", type=int, default=1024)
     parser.add_argument("topk", type=int, default=1000)
+    return parser
 
 
 def read_embedding(emb_file):
