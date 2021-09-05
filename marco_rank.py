@@ -7,11 +7,11 @@ import sys
 def init_flags():
     from argparse import ArgumentParser
     parser = ArgumentParser(description="Launch Distributed Training")
-    parser.add_argument("doc_emb_file", type=str, default=None)
-    parser.add_argument("query_emb_dir", type=str, default=None)
-    parser.add_argument("output_dir", type=str, default=None)
-    parser.add_argument("batch_size", type=int, default=1024)
-    parser.add_argument("topk", type=int, default=1000)
+    parser.add_argument("--doc_emb_file", type=str, default=None)
+    parser.add_argument("--query_emb_dir", type=str, default=None)
+    parser.add_argument("--output_dir", type=str, default=None)
+    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--topk", type=int, default=1000)
     return parser
 
 
