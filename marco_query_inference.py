@@ -241,8 +241,6 @@ tf.flags.DEFINE_string(
     "which model to use"
 )
 
-flags.DEFINE_integer("log_step_count_steps", 10000, "")
-
 
 # tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
 
