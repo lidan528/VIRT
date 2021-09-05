@@ -1,7 +1,7 @@
 import tensorflow as tf
 import pickle
 import numpy as np
-import time
+import sys
 
 
 def init_flags():
@@ -344,4 +344,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    tf.app.run()
+    main(sys.argv)
