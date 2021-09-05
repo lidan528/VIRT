@@ -241,6 +241,8 @@ tf.flags.DEFINE_string(
     "which model to use"
 )
 
+flags.DEFINE_string("output_filename", None, "")
+
 
 # tf.flags.DEFINE_integer("poly_first_m", 64, "if use poly-encoder, number of document embeddings to choose")
 
