@@ -80,7 +80,8 @@ def rank_doc(query_emb_file, doc_emb_files):
                 all_top_doc_ids = doc_ids[top_doc_indices]
                 all_top_doc_scores = doc_scores[np.arange(len(doc_scores))[:, np.newaxis], top_doc_indices]
             else:
-                all_top_doc_ids = np.concatenate([all_top_doc_ids, doc_ids], axis=-1)
+                all_top_doc_ids = np.concatenate([all_top_doc_ids,
+                                                  np.tile(doc_ids, (len(all_top_doc_ids), 1))], axis=-1)
                 all_top_doc_scores = np.concatenate([all_top_doc_scores, doc_scores], axis=-1)
                 top_doc_indices = np.argsort(all_top_doc_scores, axis=-1)[:, :FLAGS.topk]
                 all_top_doc_ids = all_top_doc_ids[top_doc_indices]
