@@ -77,7 +77,7 @@ def rank_doc(query_emb_file, doc_emb_files):
                 print(f"processed {processed_doc_num} documents.")
             import pdb
             pdb.set_trace()
-            if not all_top_doc_ids:
+            if all_top_doc_ids is None:
                 top_doc_indices = np.argsort(doc_scores, axis=-1)[:, :FLAGS.topk]
                 all_top_doc_ids = doc_ids[top_doc_indices]
                 all_top_doc_scores = doc_scores[np.arange(len(doc_scores))[:, np.newaxis], top_doc_indices]
