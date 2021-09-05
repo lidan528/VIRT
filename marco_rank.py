@@ -317,7 +317,7 @@ def process(flags):
         print("start process file:" + file_name_input + " " + "result file:" + file_name_output)
         # from io import FileIO
         # input_file = FileIO(row[1])
-        input_file = row[1]
+        input_file = row[0]
         doc_emb_files = tf.io.gfile.glob(flags.doc_emb_file)
         all_top_doc_ids, query_ids = rank_doc(input_file, doc_emb_files, flags)
         output_file = flags.output_dir + file_name_output
