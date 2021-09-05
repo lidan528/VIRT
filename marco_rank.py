@@ -73,8 +73,10 @@ def rank_doc(query_emb_file, doc_emb_files):
         for doc_ids, doc_emb in read_doc_embedding(doc_emb_file):
             doc_scores = np.matmul(query_emb, doc_emb.T)
             processed_doc_num += len(doc_emb)
-            if processed_doc_num % 10*FLAGS.batch_size:
+            if processed_doc_num % FLAGS.batch_size == 0:
                 print(f"processed {processed_doc_num} documents.")
+            import pdb
+            pdb.set_trace()
             if not all_top_doc_ids:
                 top_doc_indices = np.argsort(doc_scores, axis=-1)[:, :FLAGS.topk]
                 all_top_doc_ids = doc_ids[top_doc_indices]
