@@ -154,7 +154,10 @@ def convert_to_unicode(text):
 
 def read_doc_data(doc_file):
     doc_data = {}
-    for line in tf.io.gfile.GFile(doc_file):
+    while True:
+        line = doc_file.readline()
+        if not line:
+            break
         doc_id, doc = convert_to_unicode(line).strip().split('\t')
         doc_data[doc_id] = doc
     return doc_data
@@ -162,7 +165,10 @@ def read_doc_data(doc_file):
 
 def read_query_data(query_file):
     query_data = {}
-    for line in tf.io.gfile.GFile(query_file):
+    while True:
+        line = query_file.readline()
+        if not line:
+            break
         query_id, query = convert_to_unicode(line).strip().split('\t')
         query_data[query_id] = query
     return query_data
