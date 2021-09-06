@@ -63,8 +63,7 @@ def rank_doc(query_emb_file, doc_emb_files, flags):
         for doc_ids, doc_emb in read_doc_embedding(doc_emb_file, flags.batch_size):
             doc_scores = np.matmul(query_emb, doc_emb.T)
             processed_doc_num += len(doc_emb)
-            if processed_doc_num % flags.batch_size == 0:
-                tf.logging.info(f"processed {processed_doc_num} documents.")
+            tf.logging.info(f"processed {processed_doc_num} documents.")
             if all_top_doc_ids is None:
                 # sort by descend order
                 top_doc_indices = np.argsort(-doc_scores, axis=-1)[:, :flags.topk]
