@@ -66,14 +66,16 @@ def rank_doc(query_emb_file, doc_emb_files, flags):
             if processed_doc_num % flags.batch_size == 0:
                 tf.logging.info(f"processed {processed_doc_num} documents.")
             if all_top_doc_ids is None:
-                top_doc_indices = np.argsort(doc_scores, axis=-1)[:, :flags.topk]
+                # sort by descend order
+                top_doc_indices = np.argsort(-doc_scores, axis=-1)[:, :flags.topk]
                 all_top_doc_ids = doc_ids[top_doc_indices]
                 all_top_doc_scores = doc_scores[np.arange(len(doc_scores))[:, np.newaxis], top_doc_indices]
             else:
                 all_top_doc_ids = np.concatenate([all_top_doc_ids,
                                                   np.tile(doc_ids, (len(all_top_doc_ids), 1))], axis=-1)
                 all_top_doc_scores = np.concatenate([all_top_doc_scores, doc_scores], axis=-1)
-                top_doc_indices = np.argsort(all_top_doc_scores, axis=-1)[:, :flags.topk]
+                # sort by descend order
+                top_doc_indices = np.argsort(-all_top_doc_scores, axis=-1)[:, :flags.topk]
                 all_top_doc_ids = all_top_doc_ids[np.arange(len(all_top_doc_ids))[:, np.newaxis], top_doc_indices]
                 all_top_doc_scores = all_top_doc_scores[np.arange(len(all_top_doc_scores))[:, np.newaxis], top_doc_indices]
 
