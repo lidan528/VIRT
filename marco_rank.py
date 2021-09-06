@@ -60,6 +60,8 @@ def rank_doc(query_emb_file, doc_emb_files, flags):
     query_ids, query_emb = read_query_embedding(query_emb_file)
     processed_doc_num = 0
     for doc_emb_file in doc_emb_files:
+        import pdb
+        pdb.set_trace()
         for doc_ids, doc_emb in read_doc_embedding(doc_emb_file, flags.batch_size):
             doc_scores = np.matmul(query_emb, doc_emb.T)
             processed_doc_num += len(doc_emb)
