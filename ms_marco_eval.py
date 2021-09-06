@@ -21,16 +21,16 @@ def load_reference_from_stream(f):
     """
     qids_to_relevant_passageids = {}
     for l in f:
-        try:
-            l = l.strip().split('\t')
-            qid = int(l[0])
-            if qid in qids_to_relevant_passageids:
-                pass
-            else:
-                qids_to_relevant_passageids[qid] = []
-            qids_to_relevant_passageids[qid].append(int(l[2]))
-        except:
-            raise IOError('\"%s\" is not valid format' % l)
+        # try:
+        l = l.strip().split('\t')
+        qid = int(l[0])
+        if qid in qids_to_relevant_passageids:
+            pass
+        else:
+            qids_to_relevant_passageids[qid] = []
+        qids_to_relevant_passageids[qid].append(int(l[2]))
+        # except:
+        #     raise IOError('\"%s\" is not valid format' % l)
     return qids_to_relevant_passageids
 
 def load_reference(path_to_reference):
