@@ -333,18 +333,16 @@ def process(flags):
 
 
 def main(argv):
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+    sc = spark.sparkContext
     parser = init_flags()
     flags = parser.parse_args(argv[1:])
+    input_dir = flags.query_emb_dir
+    tf.logging.set_verbosity(tf.logging.INFO)
 
-    input_file = tf.io.gfile.glob(flags.query_emb_dir)[0]
-    doc_emb_files = tf.io.gfile.glob(flags.doc_emb_file)
-    all_top_doc_ids, query_ids = rank_doc(input_file, doc_emb_files, flags)
-    output_file = flags.output_dir + "rank.test.txt"
-
-    with tf.io.gfile.GFile(output_file, 'w') as f:
-        for query_id, doc_ids in zip(query_ids, all_top_doc_ids):
-            for i, doc_id in enumerate(doc_ids):
-                f.write(f"{query_id}\t{doc_id}\t{i+1}\n")
+    textFiles = sc.wholeTextFiles(input_dir, minPartitions=200, use_unicode=True)
+    print(textFiles.map(process(flags)).collect())
 
 
 if __name__ == '__main__':
