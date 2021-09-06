@@ -493,9 +493,14 @@ def model_fn_builder(bert_config,
                 '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_student[v_s], v_s))
         tf.logging.info('--------------------------------------------------------------------')
 
+        if FLAGS.model_type == "bi_encoder":
+            predictions = {"query_embedding": query_embedding, "query_guid": query_guid}
+        elif FLAGS.model_type == "late_fusion":
+            predictions = {"query_embedding": query_embedding, "query_guid": query_guid, "query_mask": input_mask_sbert_a}
+
         output_spec = tf.contrib.tpu.TPUEstimatorSpec(
             mode=mode,
-            predictions={"query_embedding": query_embedding, "query_guid": query_guid},
+            predictions=predictions,
             scaffold_fn=None)
 
         return output_spec
