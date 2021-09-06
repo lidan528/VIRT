@@ -67,7 +67,7 @@ def rank_doc(query_emb_file, doc_emb_files, flags):
                 tf.logging.info(f"processed {processed_doc_num} documents.")
             if all_top_doc_ids is None:
                 # sort by descend order
-                top_doc_indices = np.argsort(-doc_scores, axis=-1)[:, :flags.topk]
+                top_doc_indices = np.argpartition(-doc_scores, flags.topk, axis=-1)[:, :flags.topk]
                 all_top_doc_ids = doc_ids[top_doc_indices]
                 all_top_doc_scores = doc_scores[np.arange(len(doc_scores))[:, np.newaxis], top_doc_indices]
             else:
@@ -75,9 +75,12 @@ def rank_doc(query_emb_file, doc_emb_files, flags):
                                                   np.tile(doc_ids, (len(all_top_doc_ids), 1))], axis=-1)
                 all_top_doc_scores = np.concatenate([all_top_doc_scores, doc_scores], axis=-1)
                 # sort by descend order
-                top_doc_indices = np.argsort(-all_top_doc_scores, axis=-1)[:, :flags.topk]
+                top_doc_indices = np.argpartition(-all_top_doc_scores, flags.topk, axis=-1)[:, :flags.topk]
                 all_top_doc_ids = all_top_doc_ids[np.arange(len(all_top_doc_ids))[:, np.newaxis], top_doc_indices]
                 all_top_doc_scores = all_top_doc_scores[np.arange(len(all_top_doc_scores))[:, np.newaxis], top_doc_indices]
+
+    top_doc_indices = np.argsort(-all_top_doc_scores, axis=-1)
+    all_top_doc_ids = all_top_doc_ids[np.arange(len(all_top_doc_ids))[:, np.newaxis], top_doc_indices]
 
     return all_top_doc_ids, query_ids
 
