@@ -165,7 +165,7 @@ def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
         segment_ids = []
         if not is_doc:
             tokens_p.append("[CLS]")
-        segment_ids.append(is_doc)
+            segment_ids.append(is_doc)
 
         for token in tokens_temp:
             tokens_p.append(token)
