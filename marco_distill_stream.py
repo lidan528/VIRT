@@ -1001,16 +1001,16 @@ def model_fn_builder(bert_config,
                                                                                   scope="bert_teacher",
                                                                                   is_reuse=tf.AUTO_REUSE)
 
-        positive_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-            get_prediction_teacher(teacher_output_layer=positive_teacher_output_layer,
-                                   num_labels=num_rele_label,
-                                   labels=cross_positive_label,
-                                   is_training=False)
-        negative_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-            get_prediction_teacher(teacher_output_layer=negative_teacher_output_layer,
-                                   num_labels=num_rele_label,
-                                   labels=cross_negative_label,
-                                   is_training=False)
+        # positive_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
+        #     get_prediction_teacher(teacher_output_layer=positive_teacher_output_layer,
+        #                            num_labels=num_rele_label,
+        #                            labels=cross_positive_label,
+        #                            is_training=False)
+        # negative_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
+        #     get_prediction_teacher(teacher_output_layer=negative_teacher_output_layer,
+        #                            num_labels=num_rele_label,
+        #                            labels=cross_negative_label,
+        #                            is_training=False)
 
         vars_teacher = tf.trainable_variables()  # stu + teacher
         for var_ in vars_student:
