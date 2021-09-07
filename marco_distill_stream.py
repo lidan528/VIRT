@@ -1020,8 +1020,8 @@ def model_fn_builder(bert_config,
         if FLAGS.model_type == "bi_encoder":
             tf.logging.info('*****use dot loss...')
 
-            pos_scores = tf.reduce_sum(query_embedding * positive_doc_embedding, axis=-1)
-            neg_scores = tf.reduce_sum(query_embedding * negative_doc_embedding, axis=-1)
+            pos_scores = tf.reduce_sum(query_embedding * positive_doc_embedding, axis=-1, keepdims=True)
+            neg_scores = tf.reduce_sum(query_embedding * negative_doc_embedding, axis=-1, keepdims=True)
             scores = tf.concat([pos_scores, neg_scores], axis=-1)
 
             log_scores = tf.nn.log_softmax(scores, axis=-1)
@@ -1031,8 +1031,8 @@ def model_fn_builder(bert_config,
         elif FLAGS.model_type == "late_fusion":
             tf.logging.info('*****use dot loss...')
 
-            pos_scores = tf.reduce_sum(positive_query_embedding * positive_doc_embedding, axis=-1)
-            neg_scores = tf.reduce_sum(negative_query_embedding * negative_doc_embedding, axis=-1)
+            pos_scores = tf.reduce_sum(positive_query_embedding * positive_doc_embedding, axis=-1, keepdims=True)
+            neg_scores = tf.reduce_sum(negative_query_embedding * negative_doc_embedding, axis=-1, keepdims=True)
             scores = tf.concat([pos_scores, neg_scores], axis=-1)
 
             log_scores = tf.nn.log_softmax(scores, axis=-1)
