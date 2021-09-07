@@ -1025,8 +1025,8 @@ def model_fn_builder(bert_config,
             scores = tf.concat([pos_scores, neg_scores], axis=-1)
 
             log_scores = tf.nn.log_softmax(scores, axis=-1)
-            loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
-            tf.summary.scalar("regular_loss", loss)
+            total_loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
+            tf.summary.scalar("regular_loss", total_loss)
 
         elif FLAGS.model_type == "late_fusion":
             tf.logging.info('*****use dot loss...')
@@ -1036,8 +1036,8 @@ def model_fn_builder(bert_config,
             scores = tf.concat([pos_scores, neg_scores], axis=-1)
 
             log_scores = tf.nn.log_softmax(scores, axis=-1)
-            loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
-            tf.summary.scalar("regular_loss", loss)
+            total_loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
+            tf.summary.scalar("regular_loss", total_loss)
 
         if FLAGS.use_kd_logit_mse:
             tf.logging.info('use mse of logits as distill object...')
