@@ -860,7 +860,8 @@ def create_model_metric_squad(bert_config, input_ids_a_ph, input_masks_a_ph, cac
     只有a需要处理输入, b端直接用已有的缓存, 注意在Deformer中，cached_emb_b是token粒度的，需要关注seq_len维度
     """
     bert_config.num_hidden_layers = sep_layers
-    top_transformer_layers = 12 - sep_layers
+    # top_transformer_layers = 12 - sep_layers
+    top_transformer_layers = 1
     model = modeling.BertModel(
         config=bert_config,
         is_training=False,
@@ -932,7 +933,7 @@ def metric_flops(bert_config):
         cached_embd_b_ph = tf.placeholder(shape=[FLAGS.train_batch_size, FLAGS.max_seq_length_doc, bert_config.hidden_size],
                                           dtype=tf.float32, name='input/cached_emd_b')
         result = metric_func(bert_config, input_ids_a_ph, input_masks_a_ph, cached_embd_b_ph, len(label_list),
-                             sep_layers=11)
+                             sep_layers=12)
 
 
     else:
