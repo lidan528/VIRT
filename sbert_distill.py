@@ -1230,7 +1230,7 @@ def model_fn_builder(bert_config,
 
         elif FLAGS.model_type == 'dipair':
             tf.logging.info("*********** use dipair as the model backbone...*******************")
-            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=11,
+            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=12,
                                                                                       cross_layer_num=1,
                                                                                       bert_config=bert_config,
                                                                                       is_training=is_training,
@@ -1738,7 +1738,7 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
   from_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)  # [batch-size, seq_len]
   batch_size = from_shape[0]
   seq_length_self = from_shape[1]
-  to_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)
+  to_shape = modeling.get_shape_list(input_mask_2, expected_rank=2)
   seq_length_another = to_shape[1]
   mask = tf.cast(
     tf.reshape(input_mask_2, [batch_size, 1, seq_length_another]), tf.float32)

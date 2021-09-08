@@ -6,7 +6,7 @@ export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_be
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/rte/bert_base_bipartition_mean_pool
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/rte/ #全局变量 数据集所在地址
 #export OUTPUT=./output/search_spuall_3/
-export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/rte/dipair_wo_att/
+export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/rte/dipair12_wo_att/
 python _--sbert_distill_boolq.py \
   --task_name=rte \
   --pooling_strategy=mean \
