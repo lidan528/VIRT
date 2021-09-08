@@ -230,10 +230,6 @@ flags.DEFINE_bool("use_in_batch_neg", False, "Whether use in-batch negatives.")
 
 flags.DEFINE_integer("poly_first_m", 64, "number of tokens to ue in poly-encoder.")
 
-flags.DEFINE_integer("num_negatives_in_tfr", 4, "number of negative samples.")
-
-flags.DEFINE_integer("num_negatives", 4, "number of negative samples.")
-
 flags.DEFINE_integer("num_train_steps", 5000000, "number of train steps.")
 
 tf.flags.DEFINE_string(
@@ -385,38 +381,6 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
 
         return input_ids_bert, input_masks_bert, segment_ids_bert
 
-    # def build_bert_input_s_bert(tokens_temp):
-    #
-    #     if len(tokens_temp) > max_seq_length_s_bert - 2:
-    #         tokens_temp = tokens_temp[0: (max_seq_length_s_bert - 2)]
-    #
-    #     tokens_p = []
-    #     segment_ids = []
-    #
-    #     tokens_p.append("[CLS]")
-    #     segment_ids.append(0)
-    #
-    #     for token in tokens_temp:
-    #         tokens_p.append(token)
-    #         segment_ids.append(0)
-    #
-    #     tokens_p.append("[SEP]")
-    #     segment_ids.append(0)
-    #
-    #     input_ids = tokenizer.convert_tokens_to_ids(tokens_p)
-    #     input_mask = [1] * len(input_ids)
-    #
-    #     while len(input_ids) < max_seq_length_s_bert:
-    #         input_ids.append(0)
-    #         input_mask.append(0)
-    #         segment_ids.append(0)
-    #
-    #     assert len(input_ids) == max_seq_length_s_bert
-    #     assert len(input_mask) == max_seq_length_s_bert
-    #     assert len(segment_ids) == max_seq_length_s_bert
-    #
-    #     return input_ids, input_mask, segment_ids
-
     def build_bert_input_s_bert(tokens_temp, max_len):
 
         if len(tokens_temp) > max_len - 2:
@@ -494,9 +458,10 @@ def file_based_input_fn_builder(input_file, seq_length_query, seq_length_doc,
         "positive_doc_segment_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
         "positive_doc_masks": tf.FixedLenFeature([seq_length_doc], tf.int64),
 
-        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
-        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc * FLAGS.num_negatives_in_tfr], tf.int64),
+        "negative_doc_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
+        "negative_doc_segment_ids": tf.FixedLenFeature([seq_length_doc], tf.int64),
+        "negative_doc_masks": tf.FixedLenFeature([seq_length_doc], tf.int64),
+        "label": tf.FixedLenFeature([], tf.int64)
     }
 
     def _decode_record(record, name_to_features):
@@ -818,50 +783,29 @@ def model_fn_builder(bert_config,
             negative_doc_segment_ids = features["negative_doc_segment_ids"]
             negative_doc_masks = features["negative_doc_masks"]
 
-            # tile query_ids,query_segment_ids,query_masks
-            num_docs = FLAGS.num_negatives + 1
+            input_ids_sbert_a = query_ids
+            input_mask_sbert_a = query_masks
+            segment_ids_sbert_a = query_segment_ids
+            #
+            input_ids_sbert_b = positive_doc_ids
+            input_mask_sbert_b = positive_doc_masks
+            segment_ids_sbert_b = positive_doc_segment_ids
+            #
+            input_ids_sbert_c = negative_doc_ids
+            input_mask_sbert_c = negative_doc_masks
+            segment_ids_sbert_c = negative_doc_segment_ids
 
-            # input_ids_sbert_a = query_ids
-            # input_mask_sbert_a = query_masks
-            # segment_ids_sbert_a = query_segment_ids
+            cross_positive_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_b[:, 1:]], axis=1)
+            cross_positive_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
+            cross_positive_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
 
-            # input_ids_sbert_b = positive_doc_ids
-            # input_mask_sbert_b = positive_doc_masks
-            # segment_ids_sbert_b = positive_doc_segment_ids
+            cross_negative_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_c[:, 1:]], axis=1)
+            cross_negative_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_c[:, 1:]], axis=1)
+            cross_negative_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_c[:, 1:]], axis=1)
 
-            # negative_doc_ids = tf.reshape(negative_doc_ids,
-            #                               [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            # negative_doc_segment_ids = tf.reshape(negative_doc_segment_ids,
-            #                                       [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            # negative_doc_masks = tf.reshape(negative_doc_masks,
-            #                                 [FLAGS.train_batch_size * FLAGS.num_negatives, -1])
-            negative_doc_ids = negative_doc_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_masks = negative_doc_masks[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-            negative_doc_segment_ids = negative_doc_segment_ids[:, :FLAGS.num_negatives * FLAGS.max_seq_length_doc]
-
-            input_ids_sbert_b = tf.reshape(tf.concat([positive_doc_ids, negative_doc_ids], axis=1),
-                                           [FLAGS.train_batch_size * num_docs, -1])
-            input_mask_sbert_b = tf.reshape(tf.concat([positive_doc_masks, negative_doc_masks], axis=1),
-                                            [FLAGS.train_batch_size * num_docs, -1])
-            segment_ids_sbert_b = tf.reshape(tf.concat([positive_doc_segment_ids, negative_doc_segment_ids], axis=1),
-                                             [FLAGS.train_batch_size * num_docs, -1])
-
-            # create cross model input
-            input_ids_sbert_a = tf.tile(query_ids, tf.constant([1, num_docs]))
-            input_ids_sbert_a = tf.reshape(input_ids_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-            segment_ids_sbert_a = tf.tile(query_segment_ids, tf.constant([1, num_docs]))
-            segment_ids_sbert_a = tf.reshape(segment_ids_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-            input_mask_sbert_a = tf.tile(query_masks, tf.constant([1, num_docs]))
-            input_mask_sbert_a = tf.reshape(input_mask_sbert_a, [FLAGS.train_batch_size * num_docs, -1])
-
-            cross_input_ids = tf.concat([input_ids_sbert_a, input_ids_sbert_b[:, 1:]], axis=1)
-            cross_input_masks = tf.concat([input_mask_sbert_a, input_mask_sbert_b[:, 1:]], axis=1)
-            cross_segment_ids = tf.concat([segment_ids_sbert_a, segment_ids_sbert_b[:, 1:]], axis=1)
-
-            label_ids = tf.constant([1] + [0] * FLAGS.num_negatives, dtype=tf.int32)
-            label_ids = tf.tile(label_ids, tf.constant([FLAGS.train_batch_size]))
-
-            # label_mask = tf.cast(tf.reduce_sum(input_ids_sbert_b, axis=1) > 0, dtype=tf.float32)
+            label_ids = features["label"]
+            cross_positive_label = tf.constant([1] * FLAGS.train_batch_size, dtype=tf.int32)
+            cross_negative_label = tf.constant([0] * FLAGS.train_batch_size, dtype=tf.int32)
 
         if FLAGS.model_type == 'poly':
             tf.logging.info("*********** use poly encoder as the model backbone...*******************")
@@ -948,16 +892,34 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=False)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=False)
-            regular_embedding = newly_late_interaction(query_embedding, input_mask_sbert_a, doc_embedding,
-                                                       input_mask_sbert_b)
+            positive_doc_embedding, positive_model_stu_doc = create_model_sbert(bert_config=bert_config,
+                                                                                is_training=is_training,
+                                                                                input_ids=input_ids_sbert_b,
+                                                                                input_mask=input_mask_sbert_b,
+                                                                                segment_ids=segment_ids_sbert_b,
+                                                                                use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                scope="bert_student",
+                                                                                is_reuse=tf.AUTO_REUSE,
+                                                                                pooling=False)
+
+            negative_doc_embedding, negative_model_stu_doc = create_model_sbert(bert_config=bert_config,
+                                                                                is_training=is_training,
+                                                                                input_ids=input_ids_sbert_c,
+                                                                                input_mask=input_mask_sbert_c,
+                                                                                segment_ids=segment_ids_sbert_c,
+                                                                                use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                scope="bert_student",
+                                                                                is_reuse=tf.AUTO_REUSE,
+                                                                                pooling=False)
+
+            positive_query_embedding, positive_doc_embedding = newly_late_interaction_emb(query_embedding,
+                                                                                          input_mask_sbert_a,
+                                                                                          positive_doc_embedding,
+                                                                                          input_mask_sbert_b)
+            negative_query_embedding, negative_doc_embedding = newly_late_interaction_emb(query_embedding,
+                                                                                          input_mask_sbert_a,
+                                                                                          negative_doc_embedding,
+                                                                                          input_mask_sbert_c)
 
         else:
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
@@ -968,24 +930,46 @@ def model_fn_builder(bert_config,
                                                                   scope="bert_student",
                                                                   is_reuse=tf.AUTO_REUSE,
                                                                   pooling=True)
-            doc_embedding, model_stu_doc = create_model_sbert(bert_config=bert_config, is_training=is_training,
-                                                              input_ids=input_ids_sbert_b,
-                                                              input_mask=input_mask_sbert_b,
-                                                              segment_ids=segment_ids_sbert_b,
-                                                              use_one_hot_embeddings=use_one_hot_embeddings,
-                                                              scope="bert_student",
-                                                              is_reuse=tf.AUTO_REUSE,
-                                                              pooling=True)
-            if FLAGS.model_type == 'sbert':
-                tf.logging.info("*********** use sbert as the model backbone...*******************")
-                sub_embedding = tf.abs(query_embedding - doc_embedding)
-                max_embedding = tf.square(tf.reduce_max([query_embedding, doc_embedding], axis=0))
-                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, max_embedding], -1)
-            elif FLAGS.model_type == 'bi_encoder':
-                tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
-                sub_embedding = tf.abs(query_embedding - doc_embedding)
-                dot_embedding = query_embedding * doc_embedding
-                regular_embedding = tf.concat([query_embedding, doc_embedding, sub_embedding, dot_embedding], -1)
+            positive_doc_embedding, positive_model_stu_doc = create_model_sbert(bert_config=bert_config,
+                                                                                is_training=is_training,
+                                                                                input_ids=input_ids_sbert_b,
+                                                                                input_mask=input_mask_sbert_b,
+                                                                                segment_ids=segment_ids_sbert_b,
+                                                                                use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                scope="bert_student",
+                                                                                is_reuse=tf.AUTO_REUSE,
+                                                                                pooling=True)
+            negative_doc_embedding, negative_model_stu_doc = create_model_sbert(bert_config=bert_config,
+                                                                                is_training=is_training,
+                                                                                input_ids=input_ids_sbert_c,
+                                                                                input_mask=input_mask_sbert_c,
+                                                                                segment_ids=segment_ids_sbert_c,
+                                                                                use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                scope="bert_student",
+                                                                                is_reuse=tf.AUTO_REUSE,
+                                                                                pooling=True)
+
+            # if FLAGS.model_type == 'sbert':
+            #     tf.logging.info("*********** use sbert as the model backbone...*******************")
+            #     pos_sub_embedding = tf.abs(query_embedding - positive_doc_embedding)
+            #     pos_max_embedding = tf.square(tf.reduce_max([query_embedding, positive_doc_embedding], axis=0))
+            #     positive_regular_embedding = tf.concat([query_embedding, positive_doc_embedding,
+            #                                             pos_sub_embedding, pos_max_embedding], -1)
+            #     neg_sub_embedding = tf.abs(query_embedding - negative_doc_embedding)
+            #     neg_max_embedding = tf.square(tf.reduce_max([query_embedding, negative_doc_embedding], axis=0))
+            #     negative_regular_embedding = tf.concat([query_embedding, negative_doc_embedding,
+            #                                             neg_sub_embedding, neg_max_embedding], -1)
+            #
+            # elif FLAGS.model_type == 'bi_encoder':
+            #     tf.logging.info("*********** use bi-encoder as the model backbone...*******************")
+            #     pos_sub_embedding = tf.abs(query_embedding - positive_doc_embedding)
+            #     pos_dot_embedding = query_embedding * positive_doc_embedding
+            #     positive_regular_embedding = tf.concat([query_embedding, positive_doc_embedding,
+            #                                             pos_sub_embedding, pos_dot_embedding], -1)
+            #     neg_sub_embedding = tf.abs(query_embedding - negative_doc_embedding)
+            #     neg_dot_embedding = query_embedding * negative_doc_embedding
+            #     negative_regular_embedding = tf.concat([query_embedding, negative_doc_embedding,
+            #                                             neg_sub_embedding, neg_dot_embedding], -1)
 
         # if FLAGS.model_type != 'col':
         #     if FLAGS.use_resnet_predict:
@@ -1000,18 +984,33 @@ def model_fn_builder(bert_config,
 
         vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
-        teacher_output_layer, model_teacher = create_model_bert(bert_config=bert_config, is_training=False,
-                                                                input_ids=cross_input_ids,
-                                                                input_mask=cross_input_masks,
-                                                                segment_ids=cross_segment_ids,
-                                                                use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                scope="bert_teacher",
-                                                                is_reuse=tf.AUTO_REUSE)
-        loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-            get_prediction_teacher(teacher_output_layer=teacher_output_layer,
-                                   num_labels=num_rele_label,
-                                   labels=label_ids,
-                                   is_training=False)
+        positive_teacher_output_layer, positive_model_teacher = create_model_bert(bert_config=bert_config,
+                                                                                  is_training=False,
+                                                                                  input_ids=cross_positive_input_ids,
+                                                                                  input_mask=cross_positive_input_masks,
+                                                                                  segment_ids=cross_positive_segment_ids,
+                                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                  scope="bert_teacher",
+                                                                                  is_reuse=tf.AUTO_REUSE)
+        negative_teacher_output_layer, negative_model_teacher = create_model_bert(bert_config=bert_config,
+                                                                                  is_training=False,
+                                                                                  input_ids=cross_negative_input_ids,
+                                                                                  input_mask=cross_negative_input_masks,
+                                                                                  segment_ids=cross_negative_segment_ids,
+                                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                  scope="bert_teacher",
+                                                                                  is_reuse=tf.AUTO_REUSE)
+
+        # positive_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
+        #     get_prediction_teacher(teacher_output_layer=positive_teacher_output_layer,
+        #                            num_labels=num_rele_label,
+        #                            labels=cross_positive_label,
+        #                            is_training=False)
+        # negative_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
+        #     get_prediction_teacher(teacher_output_layer=negative_teacher_output_layer,
+        #                            num_labels=num_rele_label,
+        #                            labels=cross_negative_label,
+        #                            is_training=False)
 
         vars_teacher = tf.trainable_variables()  # stu + teacher
         for var_ in vars_student:
@@ -1019,69 +1018,26 @@ def model_fn_builder(bert_config,
 
         # in-batch negative loss....
         if FLAGS.model_type == "bi_encoder":
-            if FLAGS.use_in_batch_neg:
-                tf.logging.info('*****use in batch negatives loss...')
-                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_negative_loss(
-                    query_embedding=query_embedding,
-                    doc_embedding=doc_embedding,
-                    label_ids=label_ids,
-                    num_docs=num_docs)
-                total_loss = loss_in_batch
-                tf.summary.scalar("regular_loss", loss_in_batch)
-            # without in-batch negative
-            else:
-                # tf.logging.info('*****use regular loss...')
-                # doc_embedding = tf.reshape(doc_embedding, [FLAGS.train_batch_size, num_docs, -1])
-                # scores_in_batch = tf.einsum('bh,bih->bi', query_embedding, doc_embedding)
-                # log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
-                # label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
-                # per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
-                # regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                # tf.summary.scalar("regular_loss", regular_loss_stu)
-                # total_loss = regular_loss_stu
-                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    logits_student = tf.layers.dense(regular_embedding, units=2)
-                probabilities_student = tf.nn.softmax(logits_student)
-                log_probs_student = tf.nn.log_softmax(logits_student)
-                one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-                per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                tf.summary.scalar("regular_loss", regular_loss_stu)
-                total_loss = regular_loss_stu
+            tf.logging.info('*****use dot loss...')
+
+            pos_scores = tf.reduce_sum(query_embedding * positive_doc_embedding, axis=-1, keepdims=True)
+            neg_scores = tf.reduce_sum(query_embedding * negative_doc_embedding, axis=-1, keepdims=True)
+            scores = tf.concat([pos_scores, neg_scores], axis=-1)
+
+            log_scores = tf.nn.log_softmax(scores, axis=-1)
+            total_loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
+            tf.summary.scalar("regular_loss", total_loss)
 
         elif FLAGS.model_type == "late_fusion":
-            if FLAGS.use_in_batch_neg:
-                tf.logging.info('*****use in batch negatives loss...')
-                loss_in_batch, scores_in_batch, label_ids_in_batch = in_batch_late_interaction(
-                    query_embeddings=query_embedding,
-                    query_mask=input_mask_sbert_a,
-                    doc_embeddings=doc_embedding,
-                    label_ids=label_ids,
-                    num_docs=num_docs,
-                    doc_mask=input_mask_sbert_b)
-                total_loss = loss_in_batch
-                tf.summary.scalar("regular_loss", loss_in_batch)
-            # without in-batch negative
-            else:
-                tf.logging.info('*****use regular loss...')
-                # with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                #     scores_in_batch = tf.layers.dense(regular_embedding, units=1)  # [bs*num_docs, 1]
-                # scores_in_batch = tf.reshape(scores_in_batch, [FLAGS.train_batch_size, num_docs])
-                # log_scores_in_batch = tf.nn.log_softmax(scores_in_batch, axis=-1)
-                # label_ids = tf.cast(tf.reshape(label_ids, [FLAGS.train_batch_size, -1]), tf.float32)
-                # per_example_loss_stu = -tf.reduce_sum(label_ids * log_scores_in_batch, axis=-1)
-                # regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                # tf.summary.scalar("regular_loss", regular_loss_stu)
-                # total_loss = regular_loss_stu
-                with tf.variable_scope("regular_linear_layer", reuse=tf.AUTO_REUSE):
-                    logits_student = tf.layers.dense(regular_embedding, units=2)
-                probabilities_student = tf.nn.softmax(logits_student)
-                log_probs_student = tf.nn.log_softmax(logits_student)
-                one_hot_labels = tf.one_hot(label_ids, depth=num_rele_label, dtype=tf.float32)
-                per_example_loss_stu = -tf.reduce_sum(one_hot_labels * log_probs_student, axis=-1)
-                regular_loss_stu = tf.reduce_mean(per_example_loss_stu)
-                tf.summary.scalar("regular_loss", regular_loss_stu)
-                total_loss = regular_loss_stu
+            tf.logging.info('*****use dot loss...')
+
+            pos_scores = tf.reduce_sum(positive_query_embedding * positive_doc_embedding, axis=-1, keepdims=True)
+            neg_scores = tf.reduce_sum(negative_query_embedding * negative_doc_embedding, axis=-1, keepdims=True)
+            scores = tf.concat([pos_scores, neg_scores], axis=-1)
+
+            log_scores = tf.nn.log_softmax(scores, axis=-1)
+            total_loss = tf.reduce_mean(-1.0 * log_scores[:, 0])
+            tf.summary.scalar("regular_loss", total_loss)
 
         if FLAGS.use_kd_logit_mse:
             tf.logging.info('use mse of logits as distill object...')
@@ -1105,11 +1061,18 @@ def model_fn_builder(bert_config,
         ## attention loss
         if FLAGS.use_kd_att:
             tf.logging.info('use att as distill object...')
-            distill_loss_att = get_attention_loss(model_student_query=model_stu_query,
-                                                  model_student_doc=model_stu_doc,
-                                                  model_teacher=model_teacher,
-                                                  input_mask_sbert_query=input_mask_sbert_a,
-                                                  input_mask_sbert_doc=input_mask_sbert_b)
+            positive_distill_loss_att = get_attention_loss(model_student_query=model_stu_query,
+                                                           model_student_doc=positive_model_stu_doc,
+                                                           model_teacher=positive_model_teacher,
+                                                           input_mask_sbert_query=input_mask_sbert_a,
+                                                           input_mask_sbert_doc=input_mask_sbert_b)
+            negative_distill_loss_att = get_attention_loss(model_student_query=model_stu_query,
+                                                           model_student_doc=negative_model_stu_doc,
+                                                           model_teacher=negative_model_teacher,
+                                                           input_mask_sbert_query=input_mask_sbert_a,
+                                                           input_mask_sbert_doc=input_mask_sbert_b)
+
+            distill_loss_att = positive_distill_loss_att + negative_distill_loss_att
             scaled_att_loss = FLAGS.kd_weight_att * distill_loss_att
             total_loss = total_loss + scaled_att_loss
             tf.summary.scalar("att_loss", distill_loss_att)
@@ -1201,16 +1164,10 @@ def model_fn_builder(bert_config,
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu, vars_student)
-            if FLAGS.use_in_batch_neg:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"score_in_batch": scores_in_batch},
-                    every_n_iter=1
-                )
-            else:
-                logging_hook = tf.train.LoggingTensorHook(
-                    {"probabilities": probabilities_student},
-                    every_n_iter=1
-                )
+            logging_hook = tf.train.LoggingTensorHook(
+                {"log_scores": log_scores},
+                every_n_iter=1
+            )
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
@@ -1492,6 +1449,33 @@ def newly_late_interaction(query_embeddings, query_mask, doc_embeddings, doc_mas
     return regular_embedding
 
 
+def newly_late_interaction_emb(query_embeddings, query_mask, doc_embeddings, doc_mask):
+    # query_embeddings: [bs, query_len, emb]
+    # doc_embeddings: [bs, doc_len, emb]
+    emb_dim = modeling.get_shape_list(query_embeddings, expected_rank=3)[-1]
+    query2doc_att = tf.matmul(query_embeddings, doc_embeddings, transpose_b=True)  # [bs, query_len, doc_len]
+    query2doc_att = tf.multiply(query2doc_att,
+                                1.0 / math.sqrt(float(emb_dim)))
+    query2doc_mask = create_att_mask_for2(query_mask, doc_mask)  # [bs, query_len, doc_len]
+    adder1 = (1.0 - tf.cast(query2doc_mask, tf.float32)) * -10000.0
+    query2doc_scores = query2doc_att + adder1
+    query2doc_probs = tf.nn.softmax(query2doc_scores)  # [bs, query_len, doc_len]
+    weighted_doc_embedding = tf.matmul(query2doc_probs, doc_embeddings)  # [bs,  query_len, emb]
+    embedding1 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+
+    doc2query_att = tf.matmul(doc_embeddings, query_embeddings, transpose_b=True)
+    doc2query_att = tf.multiply(doc2query_att,
+                                1.0 / math.sqrt(float(emb_dim)))
+    doc2query_mask = create_att_mask_for2(doc_mask, query_mask)
+    adder2 = (1.0 - tf.cast(doc2query_mask, tf.float32)) * -10000.0
+    doc2query_scores = doc2query_att + adder2
+    doc2query_probs = tf.nn.softmax(doc2query_scores)  # [bs, doc_len, query_len]
+    weighted_doc_embedding = tf.matmul(doc2query_probs, query_embeddings)  # [bs,  doc_len, emb]
+    embedding2 = tf.reduce_mean(weighted_doc_embedding, axis=1)
+
+    return embedding1, embedding2
+
+
 def in_batch_late_interaction(query_embeddings, query_mask, doc_embeddings, label_ids,
                               num_docs, doc_mask):
     # query_embeddings: [bs*num_docs, query_len, emb]
@@ -1593,9 +1577,9 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
             in zip(stu_qu_all_q_w_4d, stu_do_all_k_w_4d,
                    stu_qu_all_k_w_4d, stu_do_all_q_w_4d,
                    tea_all_att_scores_before_mask):
-        # sbert_query_qw: [bs, num_heads, seq_len=130, head_dim]
-        # sbert_doc_kw: [bs, num_heads, seq_len, head_dim]
-        # bert_att_score: [bs, num_heads, 2*seq_len-1, 2*seq_len-1]
+        # sbert_query_qw: [bs, num_heads, query_seq_len, head_dim]
+        # sbert_doc_kw: [bs, num_heads, doc_seq_len, head_dim]
+        # bert_att_score: [bs, num_heads, query_seq_len+doc_seq_len-1, 2*seq_len-1]
         query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :],
                                  transpose_b=True)  # [bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,

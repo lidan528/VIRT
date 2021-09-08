@@ -21,14 +21,14 @@ def init_flags():
 
     parser.add_argument("--output_dir", type=str, help="Output TF example file (or comma-separated list of files).")
 
-    parser.add_argument("--doc_data", type=str, help="Document data file.")
-    parser.add_argument("--query_data", type=str, help="Query data file.")
-
     parser.add_argument("--vocab_file", type=str, help="The vocabulary file that the BERT model was trained on.")
 
     parser.add_argument("--do_lower_case", action='store_true', default=True,
                         help="Whether to lower case the input text. "
                              "Should be True for uncased models and False for cased models.")
+
+    parser.add_argument("--query", action="store_true", default=False)
+    parser.add_argument("--doc", action="store_true", default=False)
 
     parser.add_argument("--max_doc_length", type=int, default=512, help="Maximum input sequence length.")
     parser.add_argument("--max_query_length", type=int, default=128, help="Maximum input sequence length.")
@@ -36,8 +36,45 @@ def init_flags():
     return parser
 
 
-def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_length,
-                               output_files):
+def write_doc_example_to_tfr_files(instances, tokenizer, max_doc_length, output_files):
+    """Create TF example files from `TrainingInstance`s."""
+    writers = []
+    for output_file in output_files:
+        writers.append(tf.python_io.TFRecordWriter(output_file))
+
+    writer_index = 0
+
+    total_written = 0
+    for (inst_index, instance) in enumerate(instances):
+        doc_ids = tokenizer.convert_tokens_to_ids(instance.doc_tokens)
+        doc_segment_ids = instance.doc_segment_ids
+        doc_masks = [1] * len(doc_ids)
+        while len(doc_ids) < max_doc_length:
+            doc_ids.append(0)
+            doc_segment_ids.append(0)
+            doc_masks.append(0)
+        assert len(doc_ids) == len(doc_segment_ids) == len(doc_masks)
+
+        features = collections.OrderedDict()
+        features["doc_guid"] = create_int_feature([int(instance.doc_id)])
+        features["doc_ids"] = create_int_feature(doc_ids)
+        features["doc_segment_ids"] = create_int_feature(doc_segment_ids)
+        features["doc_masks"] = create_int_feature(doc_masks)
+
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+
+        writers[writer_index].write(tf_example.SerializeToString())
+        writer_index = (writer_index + 1) % len(writers)
+
+        total_written += 1
+
+    for writer in writers:
+        writer.close()
+
+    tf.logging.info("Wrote %d total instances", total_written)
+
+
+def write_query_example_to_tfr_files(instances, tokenizer, max_query_length, output_files):
     """Create TF example files from `TrainingInstance`s."""
     writers = []
     for output_file in output_files:
@@ -54,76 +91,20 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
             query_ids.append(0)
             query_segment_ids.append(0)
             query_masks.append(0)
-        positive_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
-        negative_doc_ids = [tokenizer.convert_tokens_to_ids(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
-        positive_segment_ids = list(instance.positive_doc_segment_ids)
-        negative_segment_ids = list(instance.negative_doc_segment_ids)
-        positive_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.positive_doc_tokens]
-        negative_doc_masks = [[1] * len(doc_tokens) for doc_tokens in instance.negative_doc_tokens]
-        for i, pd in enumerate(positive_doc_ids):
-            while len(pd) < max_doc_length:
-                positive_doc_ids[i].append(0)
-                positive_segment_ids[i].append(0)
-                positive_doc_masks[i].append(0)
-            assert len(positive_doc_ids[i]) == len(positive_segment_ids[i]) == \
-                   len(positive_doc_masks[i]) == max_doc_length
-        for i, pd in enumerate(negative_doc_ids):
-            while len(pd) < max_doc_length:
-                negative_doc_ids[i].append(0)
-                negative_segment_ids[i].append(0)
-                negative_doc_masks[i].append(0)
-            assert len(negative_doc_ids[i]) == len(negative_segment_ids[i]) == \
-                   len(negative_doc_masks[i]) == max_doc_length
+        assert len(query_ids) == len(query_segment_ids) == len(query_masks)
 
         features = collections.OrderedDict()
-        features["query_guid"] = create_int_feature([int(instance.qid)])
+        features["query_guid"] = create_int_feature([int(instance.query_id)])
         features["query_ids"] = create_int_feature(query_ids)
         features["query_segment_ids"] = create_int_feature(query_segment_ids)
         features["query_masks"] = create_int_feature(query_masks)
 
-        def flatten_list(fl):
-            return [t for l in fl for t in l]
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
 
-        # truncate negative docs
-        # negative_doc_ids = negative_doc_ids[:4]
-        # negative_segment_ids = negative_segment_ids[:4]
-        # negative_doc_masks = negative_doc_masks[:4]
-        while len(negative_doc_ids) < 4:
-            # negative_doc_ids.append([0] * max_doc_length)
-            # negative_segment_ids.append([0] * max_doc_length)
-            # negative_doc_masks.append([1] + [0] * (max_doc_length-1))
-            negative_doc_ids.append(negative_doc_ids[-1])
-            negative_segment_ids.append(negative_segment_ids[-1])
-            negative_doc_masks.append(negative_doc_masks[-1])
+        writers[writer_index].write(tf_example.SerializeToString())
+        writer_index = (writer_index + 1) % len(writers)
 
-        assert len(negative_doc_ids) == len(negative_segment_ids) == len(negative_doc_masks) == 4, \
-            print(len(negative_doc_ids), len(negative_segment_ids), len(negative_doc_masks))
-
-        for pidx, positive_doc in enumerate(positive_doc_ids):
-            features["positive_doc_ids"] = create_int_feature(positive_doc_ids[pidx])
-            features["positive_doc_segment_ids"] = create_int_feature(positive_segment_ids[pidx])
-            features["positive_doc_masks"] = create_int_feature(positive_doc_masks[pidx])
-
-            features["negative_doc_ids"] = create_int_feature(flatten_list(negative_doc_ids))
-            features["negative_doc_segment_ids"] = create_int_feature(flatten_list(negative_segment_ids))
-            features["negative_doc_masks"] = create_int_feature(flatten_list(negative_doc_masks))
-
-            tf_example = tf.train.Example(features=tf.train.Features(feature=features))
-
-            writers[writer_index].write(tf_example.SerializeToString())
-            writer_index = (writer_index + 1) % len(writers)
-
-            total_written += 1
-
-        if inst_index < 20:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("query: %s" % " ".join(
-                [tokenization.printable_text(x) for x in instance.query_tokens]))
-            tf.logging.info("positive doc: %s" % " ".join(
-                [tokenization.printable_text(x) for x in instance.positive_doc_tokens[0]]
-            ))
-            tf.logging.info("negative doc: %s" % " ".join(
-                [tokenization.printable_text(x) for x in instance.negative_doc_tokens[0]]))
+        total_written += 1
 
     for writer in writers:
         writer.close()
@@ -149,16 +130,17 @@ def create_bytes_feature(value):
 
 
 class DocExample(object):
-    def __init__(self, qid, query_tokens, query_segment_ids,
-                 positive_doc_tokens, positive_doc_segment_ids,
-                 negative_doc_tokens, negative_doc_segment_ids):
-        self.qid = qid
+    def __init__(self, doc_id, doc_tokens, doc_segment_ids):
+        self.doc_id = doc_id
+        self.doc_tokens = doc_tokens
+        self.doc_segment_ids = doc_segment_ids
+
+
+class QueryExample(object):
+    def __init__(self, query_id, query_tokens, query_segment_ids):
+        self.query_id = query_id
         self.query_tokens = query_tokens
         self.query_segment_ids = query_segment_ids
-        self.positive_doc_tokens = positive_doc_tokens
-        self.positive_doc_segment_ids = positive_doc_segment_ids
-        self.negative_doc_tokens = negative_doc_tokens
-        self.negative_doc_segment_ids = negative_doc_segment_ids
 
 
 def convert_to_unicode(text):
@@ -173,7 +155,10 @@ def convert_to_unicode(text):
 
 def read_doc_data(doc_file):
     doc_data = {}
-    for line in tf.io.gfile.GFile(doc_file):
+    while True:
+        line = doc_file.readline()
+        if not line:
+            break
         doc_id, doc = convert_to_unicode(line).strip().split('\t')
         doc_data[doc_id] = doc
     return doc_data
@@ -181,33 +166,43 @@ def read_doc_data(doc_file):
 
 def read_query_data(query_file):
     query_data = {}
-    for line in tf.io.gfile.GFile(query_file):
+    while True:
+        line = query_file.readline()
+        if not line:
+            break
         query_id, query = convert_to_unicode(line).strip().split('\t')
         query_data[query_id] = query
     return query_data
 
 
-def _data_generate(doc_data, query_data, id_file):
-    line_no = 0
-    train_data = []
-    # header
-    while True:
-        line = convert_to_unicode(id_file.readline())
-        if not line:
-            break
-        line_no += 1
-        qid, pid, nids = line.strip().split('\t')
-        nids = nids.split(',')
-        train_data.append({
-            "qid": qid,
-            "query": query_data[qid],
-            "positive_docs": [doc_data[pid]],
-            "negative_docs": [doc_data[nid] for nid in nids[:4]]  # truncate negative docs
-        })
-    return train_data
+def create_query_examples(query_data, max_query_length, tokenizer):
+
+    def build_bert_input(tokens_temp, max_seq_length, is_doc=0):
+        tokens_p = []
+        segment_ids = []
+        tokens_p.append("[CLS]")
+        segment_ids.append(is_doc)
+
+        for token in tokens_temp:
+            tokens_p.append(token)
+            segment_ids.append(is_doc)
+
+        tokens_p.append("[SEP]")
+        segment_ids.append(is_doc)
+
+        # make sure length not exceed
+        if len(tokens_p) > max_seq_length:
+            tokens_p = tokens_p[:max_seq_length]
+            segment_ids = segment_ids[:max_seq_length]
+
+        return tokens_p, segment_ids
+    for query_id, query_text in query_data.items():
+        query_tokens = tokenizer.tokenize(query_text)[:max_query_length - 2]
+        query_tokens, query_segment_ids = build_bert_input(query_tokens, max_seq_length=max_query_length, is_doc=False)
+        yield QueryExample(query_id=query_id, query_tokens=query_tokens, query_segment_ids=query_segment_ids)
 
 
-def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
+def create_doc_examples(doc_data, max_doc_length, tokenizer):
     def build_bert_input(tokens_temp, max_seq_length, is_doc=0):
         tokens_p = []
         segment_ids = []
@@ -228,23 +223,11 @@ def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
 
         return tokens_p, segment_ids
 
-    for ex in train_data:
-        qid = ex['qid']
-        query_tokens = tokenizer.tokenize(ex['query'])[:max_query_length - 2]
-        positive_doc_tokens = [tokenizer.tokenize(doc)[:max_doc_length - 2] for doc in ex['positive_docs']]
-        negative_doc_tokens = [tokenizer.tokenize(doc)[:max_doc_length - 2] for doc in ex['negative_docs']]
-        query_inputs = build_bert_input(query_tokens, max_seq_length=max_query_length, is_doc=False)
-        positive_doc_inputs = [build_bert_input(doc_tokens, max_seq_length=max_doc_length, is_doc=True)
-                               for doc_tokens in positive_doc_tokens]
-        negative_doc_inputs = [build_bert_input(doc_tokens, max_seq_length=max_doc_length, is_doc=True)
-                               for doc_tokens in negative_doc_tokens]
-        query_tokens, query_segment_ids = query_inputs
-        positive_doc_tokens, positive_doc_segment_ids = list(zip(*positive_doc_inputs))
-        negative_doc_tokens, negative_doc_segment_ids = list(zip(*negative_doc_inputs))
-        yield DocExample(qid=qid, query_tokens=query_tokens, query_segment_ids=query_segment_ids,
-                         positive_doc_tokens=positive_doc_tokens, positive_doc_segment_ids=positive_doc_segment_ids,
-                         negative_doc_tokens=negative_doc_tokens, negative_doc_segment_ids=negative_doc_segment_ids)
+    for doc_id, doc_text in doc_data.items():
+        doc_tokens = tokenizer.tokenize(doc_text)[:max_doc_length - 2]
+        doc_tokens, doc_segment_ids = build_bert_input(doc_tokens, max_seq_length=max_doc_length, is_doc=True)
 
+        yield DocExample(doc_id=doc_id, doc_tokens=doc_tokens, doc_segment_ids=doc_segment_ids)
 
 
 def process(FLAGS, tokenizer):
@@ -506,18 +489,23 @@ def process(FLAGS, tokenizer):
         # tokenizer = tokenization.FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
         input_file = StringIO(row[1])
 
-        doc_data = read_doc_data(FLAGS.doc_data)
-        query_data = read_query_data(FLAGS.query_data)
-        train_data = _data_generate(doc_data, query_data, id_file=input_file)
+        if FLAGS.doc:
+            doc_data = read_doc_data(input_file)
+            doc_examples = create_doc_examples(doc_data, FLAGS.max_doc_length, tokenizer)
+            output_files = [FLAGS.output_dir + file_name_output]
+            tf.logging.info("*** Writing to output files ***")
+            for output_file in output_files:
+                tf.logging.info("  %s", output_file)
+            write_doc_example_to_tfr_files(doc_examples, tokenizer, FLAGS.max_doc_length, output_files)
 
-        examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
-
-        output_files = [FLAGS.output_dir + file_name_output]
-        tf.logging.info("*** Writing to output files ***")
-        for output_file in output_files:
-            tf.logging.info("  %s", output_file)
-
-        write_example_to_tfr_files(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
+        if FLAGS.query:
+            query_data = read_query_data(input_file)
+            query_examples = create_query_examples(query_data, FLAGS.max_query_length, tokenizer)
+            output_files = [FLAGS.output_dir + file_name_output]
+            tf.logging.info("*** Writing to output files ***")
+            for output_file in output_files:
+                tf.logging.info("  %s", output_file)
+            write_query_example_to_tfr_files(query_examples, tokenizer, FLAGS.max_query_length, output_files)
 
         print("end process file:" + file_name_input + " " + "result file:" + file_name_output)
 
