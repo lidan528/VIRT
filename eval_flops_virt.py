@@ -833,7 +833,7 @@ def create_att_mask_for2(input_mask_1, input_mask_2):
   from_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)  # [batch-size, seq_len]
   batch_size = from_shape[0]
   seq_length_self = from_shape[1]
-  to_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)
+  to_shape = modeling.get_shape_list(input_mask_2, expected_rank=2)
   seq_length_another = to_shape[1]
   mask = tf.cast(
     tf.reshape(input_mask_2, [batch_size, 1, seq_length_another]), tf.float32)
