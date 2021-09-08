@@ -1230,7 +1230,7 @@ def model_fn_builder(bert_config,
 
         elif FLAGS.model_type == 'dipair':
             tf.logging.info("*********** use dipair as the model backbone...*******************")
-            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=11,
+            regular_embedding, model_stu_query, model_stu_doc = create_model_dipair(bi_layer_num=12,
                                                                                       cross_layer_num=1,
                                                                                       bert_config=bert_config,
                                                                                       is_training=is_training,
