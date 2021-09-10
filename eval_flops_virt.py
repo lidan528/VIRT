@@ -824,12 +824,6 @@ def serving_input_receiver_fn(max_seq_length):
 
 
 def create_att_mask_for2(input_mask_1, input_mask_2):
-  """
-  相当于将input_mask列表复制seq_len次
-  得到的矩阵中, 如果原input_mask的第i个元素为0，那么矩阵的第i列就全为0
-  从而防止input_mask为0的元素被att，但它可以att to别的元素
-  如果输入的是mask_doc，那么就要复制query_length次，形成[query_length , mask_doc]的mask
-  """
   from_shape = modeling.get_shape_list(input_mask_1, expected_rank=2)  # [batch-size, seq_len]
   batch_size = from_shape[0]
   seq_length_self = from_shape[1]
