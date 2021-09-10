@@ -982,39 +982,30 @@ def model_fn_builder(bert_config,
         #                                    num_labels=num_rele_label,
         #                                    is_training=is_training)
 
-        vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
+        if FLAGS.use_kd_att:
 
-        positive_teacher_output_layer, positive_model_teacher = create_model_bert(bert_config=bert_config,
-                                                                                  is_training=False,
-                                                                                  input_ids=cross_positive_input_ids,
-                                                                                  input_mask=cross_positive_input_masks,
-                                                                                  segment_ids=cross_positive_segment_ids,
-                                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                                  scope="bert_teacher",
-                                                                                  is_reuse=tf.AUTO_REUSE)
-        negative_teacher_output_layer, negative_model_teacher = create_model_bert(bert_config=bert_config,
-                                                                                  is_training=False,
-                                                                                  input_ids=cross_negative_input_ids,
-                                                                                  input_mask=cross_negative_input_masks,
-                                                                                  segment_ids=cross_negative_segment_ids,
-                                                                                  use_one_hot_embeddings=use_one_hot_embeddings,
-                                                                                  scope="bert_teacher",
-                                                                                  is_reuse=tf.AUTO_REUSE)
+            vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
-        # positive_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-        #     get_prediction_teacher(teacher_output_layer=positive_teacher_output_layer,
-        #                            num_labels=num_rele_label,
-        #                            labels=cross_positive_label,
-        #                            is_training=False)
-        # negative_loss_teacher, per_example_loss_teacher, logits_teacher, probabilities_teacher = \
-        #     get_prediction_teacher(teacher_output_layer=negative_teacher_output_layer,
-        #                            num_labels=num_rele_label,
-        #                            labels=cross_negative_label,
-        #                            is_training=False)
+            positive_teacher_output_layer, positive_model_teacher = create_model_bert(bert_config=bert_config,
+                                                                                      is_training=False,
+                                                                                      input_ids=cross_positive_input_ids,
+                                                                                      input_mask=cross_positive_input_masks,
+                                                                                      segment_ids=cross_positive_segment_ids,
+                                                                                      use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                      scope="bert_teacher",
+                                                                                      is_reuse=tf.AUTO_REUSE)
+            negative_teacher_output_layer, negative_model_teacher = create_model_bert(bert_config=bert_config,
+                                                                                      is_training=False,
+                                                                                      input_ids=cross_negative_input_ids,
+                                                                                      input_mask=cross_negative_input_masks,
+                                                                                      segment_ids=cross_negative_segment_ids,
+                                                                                      use_one_hot_embeddings=use_one_hot_embeddings,
+                                                                                      scope="bert_teacher",
+                                                                                      is_reuse=tf.AUTO_REUSE)
 
-        vars_teacher = tf.trainable_variables()  # stu + teacher
-        for var_ in vars_student:
-            vars_teacher.remove(var_)
+            vars_teacher = tf.trainable_variables()  # stu + teacher
+            for var_ in vars_student:
+                vars_teacher.remove(var_)
 
         # in-batch negative loss....
         if FLAGS.model_type == "bi_encoder":
@@ -1125,23 +1116,23 @@ def model_fn_builder(bert_config,
 
         # vars_teacher: bert_structure: 'bert_teacher/...',  cls_structure: 'cls_teacher/..'
         # params_ckpt_teacher: bert_structure: 'bert/...', cls_structure: '...'
-        assignment_map_teacher, initialized_variable_names_teacher = \
-            modeling.get_assignment_map_from_checkpoint_teacher(
-                vars_teacher, init_checkpoint_teacher
-            )
-        tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
+        if FLAGS.use_kd_att:
+            assignment_map_teacher, initialized_variable_names_teacher = \
+                modeling.get_assignment_map_from_checkpoint_teacher(
+                    vars_teacher, init_checkpoint_teacher
+                )
+            tf.train.init_from_checkpoint(init_checkpoint_teacher, assignment_map_teacher)
+            tf.logging.info('****-------------------------init teacher----------------------*****')
+            for v_t in assignment_map_teacher:
+                tf.logging.info(
+                    '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t], v_t))
+            tf.logging.info('--------------------------------------------------------------------')
 
         assignment_map_student, initialized_variable_names_student = \
             modeling.get_assignment_map_from_checkpoint_student(
                 vars_student, init_checkpoint_student
             )
         tf.train.init_from_checkpoint(init_checkpoint_student, assignment_map_student)
-
-        tf.logging.info('****-------------------------init teacher----------------------*****')
-        for v_t in assignment_map_teacher:
-            tf.logging.info(
-                '**initialize ${}$ in graph with checkpoint params ${}$**'.format(assignment_map_teacher[v_t], v_t))
-        tf.logging.info('--------------------------------------------------------------------')
 
         tf.logging.info('****-------------------------init student----------------------*****')
         for v_s in assignment_map_student:
