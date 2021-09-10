@@ -2087,7 +2087,6 @@ if __name__ == "__main__":
     # flags.mark_flag_as_required("max_seq_length_bert")
     # flags.mark_flag_as_required("max_seq_length_sbert")
     flags.mark_flag_as_required("pooling_strategy")
-    flags.mark_flag_as_required("init_checkpoint_teacher")
     flags.mark_flag_as_required("init_checkpoint_student")
     flags.mark_flag_as_required("use_kd_att")
     flags.mark_flag_as_required("kd_weight_att")
