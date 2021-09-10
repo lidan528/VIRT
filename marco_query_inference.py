@@ -823,7 +823,7 @@ def main(_):
 
             with tf.gfile.GFile(output_predict_file, "wb") as f:
                 tf.logging.info("***** Predict results *****")
-                for prediction in estimator.predict(input_fn=predict_input_fn):
+                for prediction in estimator.predict(input_fn=predict_input_fn, checkpoint_path=FLAGS.init_checkpoint_student):
                     past_step += 1
                     if past_step % FLAGS.log_step_count_steps == 0:
                         tf.logging.info(f"predict {past_step} instances already.")
