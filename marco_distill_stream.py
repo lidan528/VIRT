@@ -981,11 +981,9 @@ def model_fn_builder(bert_config,
         #             get_prediction_student(student_output_layer=regular_embedding,
         #                                    num_labels=num_rele_label,
         #                                    is_training=is_training)
+        vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
 
         if FLAGS.use_kd_att:
-
-            vars_student = tf.trainable_variables()  # bert_structure: 'bert_student/...',  cls_structure: 'cls_student/..'
-
             positive_teacher_output_layer, positive_model_teacher = create_model_bert(bert_config=bert_config,
                                                                                       is_training=False,
                                                                                       input_ids=cross_positive_input_ids,
