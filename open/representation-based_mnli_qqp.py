@@ -121,7 +121,7 @@ flags.DEFINE_bool(
 )
 
 flags.DEFINE_bool(
-    "use_kd_att", None,
+    "use_virt", None,
     "Whether to use attention distillations"
 )
 
@@ -574,7 +574,7 @@ class QqpProcessor(DataProcessor):
 def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_length_bert, max_seq_length_s_bert,
                            tokenizer):
     """
-    由于teacher模型与student模型的输入不一致，所以需要在convert_example中同时赋予两种输入
+    for both of interaction-based and representation-based
     """
     """Converts a single `InputExample` into a single `InputFeatures`."""
     label_map = {}
@@ -614,10 +614,8 @@ def conver_single_example_distill(ex_index, example, rele_label_list, max_seq_le
     # the entire model is fine-tuned.
     def build_bert_input_bert(tokens_tmp_a, tokens_tmp_b):
         """
-        为了能够将双塔和交互的att score map对应, 在交互中将sen1与sen2对半分开;
-        在双塔模型中, 将sen1与sen2分别设置为对半分开的max_len
         """
-        # 交互: [CLS] a,a,a,a,a,a, [SEP], b, b, b, b ,b [SEP]
+        # : [CLS] a,a,a,a,a,a, [SEP], b, b, b, b ,b [SEP]
         max_token_len = max_seq_length_bert - 3
         max_a_len = max_token_len // 2
         max_b_len = max_token_len - max_a_len
@@ -1269,8 +1267,8 @@ def model_fn_builder(bert_config,
                                                                                 num_rele_label=num_rele_label,
                                                                                 bert_config=bert_config)
 
-        elif FLAGS.model_type == 'late_fusion':
-            tf.logging.info("*********** use late fusion as the model backbone...*******************")
+        elif FLAGS.model_type == 'virta':
+            tf.logging.info("*********** use virt as the model backbone...*******************")
             query_embedding, model_stu_query = create_model_sbert(bert_config=bert_config, is_training=is_training,
                                                                   input_ids=input_ids_sbert_a,
                                                                   input_mask=input_mask_sbert_a,
@@ -1319,8 +1317,7 @@ def model_fn_builder(bert_config,
                 regular_embedding = tf.concat([query_embedding, doc_embedding], -1)
 
         if FLAGS.model_type != 'col':
-            if FLAGS.use_resnet_predict:
-                tf.logging.info("*************use resnet in prediction..************************")
+            if FLAGS.model_type == 'virta':
                 logits_student, probabilities_student, log_probs_student = \
                 get_prediction_student_use_resnet(regular_embedding, num_rele_label, is_training)
             else:
@@ -1371,8 +1368,8 @@ def model_fn_builder(bert_config,
             tf.summary.scalar("logit_loss_kl_scaled", scaled_logit_loss)
 
         ## attention loss
-        if FLAGS.use_kd_att:
-            tf.logging.info('use att as distill object...')
+        if FLAGS.use_virt:
+            tf.logging.info('virt enabled...')
             if FLAGS.use_weighted_att:
                 tf.logging.info("*******************use weighted att distillation...******************")
                 if FLAGS.use_att_head:
@@ -1534,14 +1531,12 @@ def model_fn_builder(bert_config,
 
 def get_prediction_teacher(teacher_output_layer, num_labels, labels, is_training):
     """
-    获取教师模型的输出，同时在定义命名空间时，需要想好教师模型加载训练好的模型的定义
-    由于教师模型<classifier_bert_bipartition>在训练时,
     -------------------------------------------------------------------------------
-                 | ckpt保存的参数名       |       计算图中的参数名
+                 | ckpt paraname        |       graph paraname
     --------------------------------------------------------------------------------
-    BERT层参数    |   bert/....          |      bert_teacher/....
+    BERT layer    |   bert/....          |      bert_teacher/....
     --------------------------------------------------------------------------------
-    上层分类器参数 | output_weights,_bias |      cls_teacher/output_weights, _bias
+    pred layer    | output_weights,_bias |      cls_teacher/output_weights, _bias
     ----------------------------------------------------------------------------------
     """
     hidden_size = teacher_output_layer.shape[-1].value
@@ -1571,16 +1566,6 @@ def get_prediction_teacher(teacher_output_layer, num_labels, labels, is_training
 
 
 def get_prediction_student(student_output_layer, num_labels, is_training):
-    """
-    获取学生模型的输出, 同时在定义命名空间时，需要想好学生模型加载BERT原始参数的对应
-    -------------------------------------------------------------------------------------------
-                 | bert_base的ckpt保存的参数名       |       计算图中的参数名
-    -------------------------------------------------------------------------------------------
-    BERT层参数    |   bert/....                     |      bert_student/....
-    --------------------------------------------------------------------------------------------
-    上层分类器参数 |      暂无，因此无需加载           |      cls_student/output_weights, _bias
-    --------------------------------------------------------------------------------------------
-    """
     hidden_size = student_output_layer.shape[-1].value
     with tf.variable_scope("cls_student"):
         output_weights = tf.get_variable(
@@ -1655,7 +1640,7 @@ def poly_encoder(query_embedding, doc_embedding, input_mask_b, bert_config):
     query_embedding = tf.expand_dims(query_embedding, axis=[1])
     poly_mask = input_mask_b[:, :FLAGS.poly_first_m]
     final_vecs = dot_attention(query_embedding, doc_embedding, doc_embedding, v_mask=poly_mask)
-    final_vecs = tf.squeeze(final_vecs, axis=[1])  # query只有一个（进行了mean pooling）
+    final_vecs = tf.squeeze(final_vecs, axis=[1])
 
     return final_vecs
 
@@ -1801,7 +1786,7 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
         query_doc_qk = tf.matmul(sbert_query_qw[:, :, 1:-1, :], sbert_doc_kw[:, :, 1:-1, :], transpose_b=True)  #[bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,
                                  1.0 / math.sqrt(float(size_per_head)))
-        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)       # doc中的padding元素不应该被attend, [bs, 130, 130]
+        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)
         query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1], axis=[1])  #to [bs, 1, seq_len=128, seq_len=128]
         query_doc_att_matrix_mask_adder = (1.0 - tf.cast(query_doc_att_matrix_mask, tf.float32)) * -10000.0
         query_doc_att_scores = query_doc_qk + query_doc_att_matrix_mask_adder
@@ -1879,7 +1864,7 @@ def get_attention_loss_with_weight_layer(model_student_query, model_student_doc,
                                  transpose_b=True)  # [bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,
                                    1.0 / math.sqrt(float(size_per_head)))
-        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)  # doc中的padding元素不应该被attend, [bs, 130, 130]
+        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)
         query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1],
                                                    axis=[1])  # to [bs, 1, seq_len=128, seq_len=128]
         query_doc_att_matrix_mask_multiplyer = tf.cast(query_doc_att_matrix_mask, tf.float32)
@@ -2047,7 +2032,7 @@ def get_attention_loss_with_weight_head(model_student_query, model_student_doc, 
                                  transpose_b=True)  # [bs, num_heads, 128, 128]
         query_doc_qk = tf.multiply(query_doc_qk,
                                    1.0 / math.sqrt(float(size_per_head)))
-        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)  # doc中的padding元素不应该被attend, [bs, 130, 130]
+        query_doc_att_matrix_mask = create_att_mask(input_mask_sbert_doc)
         query_doc_att_matrix_mask = tf.expand_dims(query_doc_att_matrix_mask[:, 1:-1, 1:-1],
                                                    axis=[1])  # to [bs, 1, seq_len=128, seq_len=128]
         query_doc_att_matrix_mask_multiplyer = tf.cast(query_doc_att_matrix_mask, tf.float32)
@@ -2248,7 +2233,7 @@ def cosine_distance(X1, X2):
     X1_X2 = X1 * X2     #[bs * emb_dim]
     X1_X2 = tf.reduce_sum(X1_X2, axis=-1)           #[bs]
 
-    cosine = X1_X2 / X1_norm_X2_norm        # 相似度，越大越好, [bs]
+    cosine = X1_X2 / X1_norm_X2_norm
     cosine = tf.reduce_mean(cosine, axis=-1)
     return 1-cosine             #distance
 
