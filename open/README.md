@@ -75,13 +75,15 @@ python bert_mnli_qqp.py \
   --max_seq_length=259 \
   --train_batch_size=5 \
   --learning_rate=5e-5 \
-  --num_train_epochs=6.0 \
+  --num_train_epochs=5.0 \
   --output_dir=$OUTPUT \
   --pooling_strategy=mean
 ```
 
 ##### Representation-based models
-`python representation-based_mnli_qqp.py` or `python representation-based_rte_boolq.py` specify task by `--task`, model by `--model_type`. eval is similar. If you want to enbale virt, please specify `--use_virt=true`. see below example commands for mnli for our virt-encoder:
+`python representation-based_mnli_qqp.py` or `python representation-based_rte_boolq.py` specify task by `--task`, model by `--model_type`. eval is similar. 
+
+If you want to enbale virt, please specify `--use_virt=true` and `--kd_weight_att`( $\alpha$ the in paper, searching from 0.1 to 1).   see below example commands for mnli for our virt-encoder:
 ```shell script
 export BERT_MODEL_DIR={YOUR BERT_BASE_DIR}
 export TEACHER_MODEL_DIR={FINETUNED BERT MODEL DIR}
