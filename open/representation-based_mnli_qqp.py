@@ -1817,7 +1817,7 @@ def get_attention_loss(model_student_query, model_student_doc, model_teacher,
 
         num += 1
 
-    loss = loss / num
+    loss = loss / num * 12 * seq_len_sbert   # 12: num_heads in bert_base
 
     return loss
 

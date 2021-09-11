@@ -21,16 +21,16 @@ ${VIRT_dir}$/datasets
 │   ├── train.jsonl
 │   └── val.jsonl
 ├── mnli
-│   ├── dev_mismatched.tsv
-│   └── train.tsv
+│   ├── dev.jsonl
+│   └── train.jsonl
 ├── qqp
-│   ├── dev.tsv
-│   ├── test.tsv
-│   └── train.tsv
+│   ├── dev.jsonl
+│   ├── test.jsonl
+│   └── train.jsonl
 |── rte
-│   ├── dev.json
-│   ├── test.json
-│   └── train.json
+│   ├── dev.jsonl
+│   ├── test.jsonl
+│   └── train.jsonl
 ```
 split 10% of train for tuning hyper-parameters:
 ```
@@ -111,7 +111,7 @@ python3 representation-based_mnli_qqp.py \
 ```
 
 #### Evaluate FLOPs
-To evaluate FLOPs, use `flops*.py`. see below example commands for boolq in bert_base:
+To evaluate FLOPs, use `flops*.py`. see below example commands for bert_base on boolq:
 
 ```shell script
 export BERT_BASE_DIR=${BERT_BASE_DIR}$
