@@ -12,7 +12,9 @@ import csv
 import json
 import math
 import horovod.tensorflow as hvd
-import modeling, tokenization, optimization
+import modeling, tokenization
+import optimization_horovod as optimization
+import input_splitter
 import collections
 import random
 
@@ -184,7 +186,9 @@ tf.flags.DEFINE_string(
 flags.DEFINE_integer("colbert_dim", 128, "reduction dimension of colbert")
 
 
-def file_based_input_fn_builder(input_file, seq_length,
+def distributed_file_based_input_fn_builder(
+                                input_file_pattern,
+                                seq_length,
                                 is_training,
                                 drop_remainder,
                                 is_eval=False):
@@ -219,7 +223,7 @@ def file_based_input_fn_builder(input_file, seq_length,
         if is_eval:
             assert hvd.rank() == 0
             tf.logging.info("*******eval mode input tfr*******")
-            d = tf.data.Dataset.list_files(input_files)
+            d = tf.data.Dataset.list_files(input_file_pattern)
             # Since we evaluate for a fixed number of steps we don't want to encounter
             # out-of-range exceptions.
             # d = d.repeat()
@@ -232,11 +236,7 @@ def file_based_input_fn_builder(input_file, seq_length,
         # For eval, we want no shuffling and parallel reading doesn't matter.
         else:
             tf.logging.info("*******train or predict mode input tfr*******")
-            d = input_splitter.input_evenly_builder(total_size, file_size, hvd.size(), hvd.rank())
-
-        # For training, we want a lot of parallel reading and shuffling.
-        # For eval, we want no shuffling and parallel reading doesn't matter.
-        d = tf.data.TFRecordDataset(input_file)
+            d = input_splitter.input_file_split_by_worker(input_file_pattern, hvd.size(), hvd.rank())
         if is_training:
             d = d.repeat()
             d = d.shuffle(buffer_size=100)
@@ -799,12 +799,19 @@ def main(_):
             FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
     is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
+
+    session_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False, operation_timeout_in_ms=0)
+    session_config.gpu_options.allow_growth = True
+    session_config.gpu_options.visible_device_list = str(hvd.local_rank())  # 查看当前使用的GPU
+    is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
+
     run_config = tf.contrib.tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         master=FLAGS.master,
         model_dir=FLAGS.output_dir,
-        save_checkpoints_steps=FLAGS.save_checkpoints_steps,
+        save_checkpoints_steps=FLAGS.save_checkpoints_steps if hvd.rank() == 0 else None,  # 只允许主机存放ckpt
         keep_checkpoint_max=80,
+        session_config=session_config,
         tpu_config=tf.contrib.tpu.TPUConfig(
             iterations_per_loop=FLAGS.iterations_per_loop,
             num_shards=FLAGS.num_tpu_cores,
@@ -841,12 +848,12 @@ def main(_):
     #         examples, ner_label_map, label_list, max_seq_length, tokenizer, output_file, is_training=False):
 
     if FLAGS.do_train:
-        train_file = tf.io.gfile.glob(FLAGS.train_data_dir)
+        # train_file = tf.io.gfile.glob(FLAGS.train_data_dir)
         tf.logging.info("***** Running training *****")
         tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
         tf.logging.info("  Num steps = %d", num_train_steps)
-        train_input_fn = file_based_input_fn_builder(
-            input_file=train_file,
+        train_input_fn = distributed_file_based_input_fn_builder(
+            input_file_pattern=FLAGS.train_data_dir,
             seq_length=FLAGS.max_seq_length,
             is_training=True,
             drop_remainder=True)
