@@ -1,6 +1,7 @@
 import tensorflow as tf
 import random
 
+
 def count_input_examples(file_pattern):
     if tf.gfile.IsDirectory(file_pattern):
         if file_pattern.endswith("/"):
@@ -20,6 +21,19 @@ def count_input_examples(file_pattern):
 
     return total_size, file_size
 
+
+def count_input_files(file_pattern):
+    if tf.gfile.IsDirectory(file_pattern):
+        if file_pattern.endswith("/"):
+            file_pattern = file_pattern + "*"
+        else:
+            file_pattern = file_pattern + "/*"
+    file_list = tf.gfile.Glob(file_pattern)
+    sorted_file_list = sorted(file_list)
+
+    return sorted_file_list
+
+
 def return_tfr_path(file_pattern):
     if tf.gfile.IsDirectory(file_pattern):
         if file_pattern.endswith("/"):
@@ -29,6 +43,38 @@ def return_tfr_path(file_pattern):
     file_list = tf.gfile.Glob(file_pattern)
     sorted_file_list = sorted(file_list)
     return sorted_file_list
+
+
+def input_file_split_by_worker(input_file_pattern, total_workers, worker_index):
+    sorted_file_list = count_input_files(input_file_pattern)
+    total_files = len(sorted_file_list)
+    files_per_worker = total_files / total_workers
+    files_mod_left = total_files % total_workers
+
+    files_to_read = files_per_worker
+    files_to_skip = files_per_worker * worker_index
+
+    if worker_index < files_mod_left:
+        files_to_skip += worker_index * 1
+        files_to_read += 1
+    else:
+        files_to_skip += files_mod_left * 1
+
+    tf.logging.info("Worker %d need to skip %d and read %d" % (worker_index, files_to_skip, files_to_read))
+
+    files_read_list = []
+    for i, f in enumerate(sorted_file_list):
+        if files_to_skip > 0:
+            files_to_skip -= 1
+            continue
+        if files_to_read <= 0:
+            break
+        # we definitely need to read this file
+        files_read_list += f
+
+    random.shuffle(files_read_list)
+    d = tf.data.TFRecordDataset(files_read_list)
+    return d
 
 
 def input_evenly_builder(total_size, file_size, total_workers, worker_index):
@@ -44,7 +90,7 @@ def input_evenly_builder(total_size, file_size, total_workers, worker_index):
         examples_to_read += 1
     else:
         examples_to_skip += examples_mod_left * 1
-    print("Worker %d need to skip %d and read %d" % (worker_index, examples_to_skip, examples_to_read))
+    tf.logging.info("Worker %d need to skip %d and read %d" % (worker_index, examples_to_skip, examples_to_read))
 
     input_datasets = []
     for (f, size) in file_size:
@@ -88,7 +134,7 @@ def input_evenly_builder(total_size, file_size, total_workers, worker_index):
         print("Worker %d read file %s(%d) from %d to %d, total %d" % (worker_index, f, size, start, end, dataset_size))
 
     # concat datasets as a tree, reduce from O(N) to O(LogN)
-    dataset_list_leaf = map(lambda (d, start, end, f, size): d, input_datasets)
+    dataset_list_leaf = map(lambda d, start, end, f, size: d, input_datasets)
     dataset_list_root = []
     while len(dataset_list_leaf) > 1:
         for i in range(0, len(dataset_list_leaf), 2):
