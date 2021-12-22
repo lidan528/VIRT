@@ -88,6 +88,36 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
     tf.logging.info("Wrote %d total instances", total_written)
 
 
+def write_example_to_tfr_files_lidan528(instances, tokenizer, max_query_length, max_doc_length,
+                               output_files):
+    """Create TF example files from `TrainingInstance`s."""
+    writers = []
+    for output_file in output_files:
+        writers.append(tf.python_io.TFRecordWriter(output_file))
+
+    writer_index = 0
+
+    total_written = 0
+    for (inst_index, instance) in enumerate(instances):
+        features = collections.OrderedDict()
+        features["input_ids"] = create_int_feature(instance.input_ids)
+        features["input_segment_ids"] = create_int_feature(instance.segment_ids)
+        features["input_masks"] = create_int_feature(instance.input_masks)
+        features["label"] = create_int_feature([instance.label])
+
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+
+        writers[writer_index].write(tf_example.SerializeToString())
+        writer_index = (writer_index + 1) % len(writers)
+
+        total_written += 1
+
+    for writer in writers:
+        writer.close()
+
+    tf.logging.info("Wrote %d total instances", total_written)
+
+
 def create_int_feature(values):
     feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
     return feature
@@ -107,12 +137,15 @@ def create_bytes_feature(value):
 
 class DocExample(object):
     def __init__(self, query_tokens, query_segment_ids,
-                 doc_tokens, doc_segment_ids, label):
+                 doc_tokens, doc_segment_ids, label, input_ids=None, input_masks=None, segment_ids=None):
         self.query_tokens = query_tokens
         self.query_segment_ids = query_segment_ids
         self.doc_tokens = doc_tokens
         self.doc_segment_ids = doc_segment_ids
         self.label = label
+        self.input_ids = input_ids
+        self.input_masks = input_masks
+        self.segment_ids = segment_ids
 
 
 def convert_to_unicode(text):
@@ -191,6 +224,66 @@ def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
 
             yield DocExample(query_tokens=query_tokens_p, query_segment_ids=query_segment_ids,
                              doc_tokens=doc_tokens_p, doc_segment_ids=doc_segment_ids, label=label)
+
+
+def create_examples_lidan528(train_data, max_query_length, max_doc_length, tokenizer):
+    def build_bert_input_lidan528(query_tokens, doc_tokens):
+        max_query_text_len = max_query_length - 2       # without [CLS] and [SEP], only actual token and <PAD>s
+        max_doc_text_len = max_doc_length - 2
+        max_bert_len = 1 + max_query_text_len + 1 + max_doc_text_len + 1
+        tokens_q = []
+        segment_ids = []
+        input_masks = []
+        tokens_q.append("[CLS]")
+        segment_ids.append(0)
+        for token in query_tokens:
+            tokens_q.append(token)
+            segment_ids.append(0)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_q)  # [CLS], a,a,a
+        input_masks = [1] * len(input_ids)  # [CLS], a,a,a
+        while len(input_ids) < max_query_text_len + 1:
+            input_ids.append(0)
+            input_masks.append(0)
+            segment_ids.append(0)
+        tokens_q.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>,[SEP],
+        input_masks.append(1)
+        segment_ids.append(0)
+
+        tokens_d = []
+        for token in doc_tokens:
+            tokens_d.append(token)
+            input_masks.append(1)
+            segment_ids.append(1)
+        input_ids += tokenizer.convert_tokens_to_ids(tokens_d)
+        while len(input_ids) < 1 + max_query_text_len + 1 + max_doc_text_len:
+            input_ids.append(0)
+            input_masks.append(0)
+            segment_ids.append(1)
+        tokens_d.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>,[SEP], b,b,b,<PAD>, [SEP]
+        input_masks.append(1)
+        segment_ids.append(1)
+
+        assert len(input_ids) == max_bert_len
+        assert len(input_masks) == max_bert_len
+        assert len(segment_ids) == max_bert_len
+
+        return input_ids, tokens_q, tokens_d, segment_ids, input_masks
+
+    for ex in train_data:
+        query_tokens = tokenizer.tokenize(ex['query'])[:max_query_length - 2]
+
+        for doc, label in zip(ex['docs'], ex['labels']):
+            # doc_tokens = tokenizer.tokenize(doc)[:max_doc_length - 1]
+            doc_tokens = tokenizer.tokenize(doc)[:max_doc_length - 2]
+            # query_tokens_p, query_segment_ids = build_bert_input(query_tokens, max_seq_length=max_query_length, is_doc=False)
+            # doc_tokens_p, doc_segment_ids = build_bert_input(doc_tokens, max_seq_length=max_doc_length, is_doc=True)
+            input_ids, tokens_q, tokens_d, segment_ids, input_masks = build_bert_input_lidan528(query_tokens, doc_tokens)
+
+            yield DocExample(query_tokens=tokens_q, query_segment_ids=None,
+                             doc_tokens=tokens_d, doc_segment_ids=None, label=label,
+                             input_ids=input_ids, input_masks=input_masks, segment_ids=segment_ids)
 
 
 def process(FLAGS, tokenizer):
@@ -453,14 +546,17 @@ def process(FLAGS, tokenizer):
         query_data = read_query_data(FLAGS.query_data)
         train_data = _data_generate(doc_data, query_data, id_file=input_file)
 
-        examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
+        # examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
+        examples = create_examples_lidan528(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
 
         output_files = [FLAGS.output_dir + file_name_output]
         tf.logging.info("*** Writing to output files ***")
         for output_file in output_files:
             tf.logging.info("  %s", output_file)
 
-        write_example_to_tfr_files(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
+        # write_example_to_tfr_files(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
+        write_example_to_tfr_files_lidan528(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length,
+                                            output_files)
 
         print("end process file:" + file_name_input + " " + "result file:" + file_name_output)
 

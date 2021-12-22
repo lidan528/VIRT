@@ -100,6 +100,42 @@ def write_example_to_tfr_files(instances, tokenizer, max_query_length, max_doc_l
     tf.logging.info("Wrote %d total instances", total_written)
 
 
+def write_example_to_tfr_files_lidan528(instances, tokenizer, max_query_length, max_doc_length,
+                               output_files):
+    """Create TF example files from `TrainingInstance`s."""
+    writers = []
+    for output_file in output_files:
+        writers.append(tf.python_io.TFRecordWriter(output_file))
+
+    writer_index = 0
+
+    total_written = 0
+    for (inst_index, instance) in enumerate(instances):
+        features = collections.OrderedDict()
+        features["query_ids"] = create_int_feature(instance.query_ids)
+        features["query_segment_ids"] = create_int_feature(instance.query_segment_ids)
+        features["query_masks"] = create_int_feature(instance.query_masks)
+        features["positive_doc_ids"] = create_int_feature(instance.positive_doc_ids)
+        features["positive_doc_segment_ids"] = create_int_feature(instance.positive_doc_segment_ids)
+        features["positive_doc_masks"] = create_int_feature(instance.positive_doc_masks)
+        features["negative_doc_ids"] = create_int_feature(instance.negative_doc_ids)
+        features["negative_doc_segment_ids"] = create_int_feature(instance.negative_doc_segment_ids)
+        features["negative_doc_masks"] = create_int_feature(instance.negative_doc_masks)
+        features["label"] = create_int_feature([0])
+
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+
+        writers[writer_index].write(tf_example.SerializeToString())
+        writer_index = (writer_index + 1) % len(writers)
+
+        total_written += 1
+
+    for writer in writers:
+        writer.close()
+
+    tf.logging.info("Wrote %d total instances", total_written)
+
+
 def create_int_feature(values):
     feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
     return feature
@@ -120,13 +156,22 @@ def create_bytes_feature(value):
 class DocExample(object):
     def __init__(self, query_tokens, query_segment_ids,
                  positive_doc_tokens, positive_doc_segment_ids,
-                 negative_doc_tokens, negative_doc_segment_ids):
+                 negative_doc_tokens, negative_doc_segment_ids,
+                 query_ids=None, query_masks=None,
+                 positive_doc_ids=None, positive_doc_masks=None,
+                 negative_doc_ids=None, negative_doc_masks=None):
         self.query_tokens = query_tokens
         self.query_segment_ids = query_segment_ids
         self.positive_doc_tokens = positive_doc_tokens
         self.positive_doc_segment_ids = positive_doc_segment_ids
         self.negative_doc_tokens = negative_doc_tokens
         self.negative_doc_segment_ids = negative_doc_segment_ids
+        self.query_ids = query_ids
+        self.query_masks = query_masks
+        self.positive_doc_ids = positive_doc_ids
+        self.positive_doc_masks = positive_doc_masks
+        self.negative_doc_ids = negative_doc_ids
+        self.negative_doc_masks = negative_doc_masks
 
 
 def convert_to_unicode(text):
@@ -207,6 +252,58 @@ def create_examples(train_data, max_query_length, max_doc_length, tokenizer):
         yield DocExample(query_tokens=query_tokens_p, query_segment_ids=query_segment_ids,
                          positive_doc_tokens=positive_doc_tokens_p, positive_doc_segment_ids=positive_doc_segment_ids,
                          negative_doc_tokens=negative_doc_tokens_p, negative_doc_segment_ids=negative_doc_segment_ids)
+
+
+
+def create_examples_lidan528(train_data, max_query_length, max_doc_length, tokenizer):
+    def build_bert_input_lidan528(tokens_temp, max_seq_length, is_doc=0):
+        tokens_p = []
+        segment_ids = []
+
+        tokens_p.append("[CLS]")
+        segment_ids.append(is_doc)
+
+        for token in tokens_temp:
+            tokens_p.append(token)
+            segment_ids.append(is_doc)
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens_p)  # [CLS], a,a,a
+        input_mask = [1] * len(input_ids)  # [CLS], a,a,a
+
+        while len(input_ids) < max_seq_length - 1:  #[CLS], a,a,a, <PAD>
+            input_ids.append(0)
+            input_mask.append(0)
+            segment_ids.append(is_doc)
+        tokens_p.append("[SEP]")
+        input_ids += tokenizer.convert_tokens_to_ids(["[SEP]"])  # [CLS], a,a,a,<PAD>, [SEP]
+        input_mask.append(1)
+        segment_ids.append(is_doc)
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+
+        return tokens_p, segment_ids, input_ids, input_mask
+
+
+    for ex in train_data:
+        query_tokens = tokenizer.tokenize(ex['query'])[:max_query_length - 2]
+
+        positive_doc_tokens = tokenizer.tokenize(ex['positive_doc'])[:max_doc_length - 2]
+        negative_doc_tokens = tokenizer.tokenize(ex['negative_doc'])[:max_doc_length - 2]
+        query_tokens_p, query_segment_ids, query_ids, query_masks\
+            = build_bert_input_lidan528(query_tokens, max_seq_length=max_query_length, is_doc=False)
+        positive_doc_tokens_p, positive_doc_segment_ids, positive_doc_ids, positive_doc_masks\
+            = build_bert_input_lidan528(positive_doc_tokens, max_seq_length=max_doc_length, is_doc=True)
+        negative_doc_tokens_p, negative_doc_segment_ids, negative_doc_ids, negative_doc_masks\
+            = build_bert_input_lidan528(negative_doc_tokens, max_seq_length=max_doc_length, is_doc=True)
+
+        yield DocExample(query_tokens=query_tokens_p, query_segment_ids=query_segment_ids,
+                         positive_doc_tokens=positive_doc_tokens_p, positive_doc_segment_ids=positive_doc_segment_ids,
+                         negative_doc_tokens=negative_doc_tokens_p, negative_doc_segment_ids=negative_doc_segment_ids,
+                         query_ids=query_ids, query_masks=query_masks,
+                         positive_doc_ids=positive_doc_ids, positive_doc_masks=positive_doc_masks,
+                         negative_doc_ids=negative_doc_ids, negative_doc_masks=negative_doc_masks)
 
 
 def process(FLAGS, tokenizer):
@@ -469,14 +566,16 @@ def process(FLAGS, tokenizer):
         query_data = read_query_data(FLAGS.query_data)
         train_data = _data_generate(doc_data, query_data, id_file=input_file)
 
-        examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
+        # examples = create_examples(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
+        examples = create_examples_lidan528(train_data, FLAGS.max_query_length, FLAGS.max_doc_length, tokenizer)
 
         output_files = [FLAGS.output_dir + file_name_output]
         tf.logging.info("*** Writing to output files ***")
         for output_file in output_files:
             tf.logging.info("  %s", output_file)
 
-        write_example_to_tfr_files(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
+        # write_example_to_tfr_files(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
+        write_example_to_tfr_files_lidan528(examples, tokenizer, FLAGS.max_query_length, FLAGS.max_doc_length, output_files)
 
         print("end process file:" + file_name_input + " " + "result file:" + file_name_output)
 

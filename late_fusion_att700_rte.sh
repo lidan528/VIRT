@@ -1,11 +1,7 @@
 export CUDA_VISIBLE_DEVICES=2
-#export BERT_BASE_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base
-#export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/bujiahao/outstanding_ckpt/128_model
-#export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/transfer_to_zw03/yangyang113/bert_base/train_log/bert_distil_minilm_L6h128I512A2_common128_wa
 export BERT_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/english_bert_base_model/uncased_L-12_H-768_A-12
 export TEACHER_MODEL_DIR=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/rte/bert_base_bipartition_mean_pool
 export MY_DATASET=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/dataset/rte/ #全局变量 数据集所在地址
-#export OUTPUT=./output/search_spuall_3/
 export OUTPUT=/home/hadoop-aipnlp/cephfs/data/lidan65/distill/output/rte/late_fusion_att700/
 python _--sbert_distill_boolq.py \
   --task_name=rte \
