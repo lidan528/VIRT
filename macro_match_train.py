@@ -1114,7 +1114,7 @@ def create_model_Deformer(bi_layer_num, bert_config, is_training,
                                                       is_reuse=tf.AUTO_REUSE,
                                                       pooling=False)
     combined_embeddings = tf.concat([query_embedding, doc_embedding[, 1:, :]], axis=1)     #[bs, seq_len ,emb_dim], remove cls in doc
-    combined_input_masks = tf.concat([input_mask_a, input_mask_b], axis=1)        #[bs, seq_len]
+    combined_input_masks = tf.concat([input_mask_a, input_mask_b[, 1:]], axis=1)        #[bs, seq_len]
     combined_att_masks = create_att_mask_for1(combined_input_masks)                    #[bs, seq_len, seq_len]
     input_shape = modeling.get_shape_list(combined_embeddings, expected_rank=3)
     batch_size = input_shape[0]
@@ -1152,7 +1152,7 @@ def create_model_Deformer(bi_layer_num, bert_config, is_training,
                                 kernel_initializer=modeling.create_initializer(bert_config.initializer_range))
                             attention_output = modeling.dropout(attention_output, bert_config.hidden_dropout_prob)
                             attention_output = modeling.layer_norm(
-                                attention_output + combined_embeddings)  # [bs * seq_len, num_heads * head_dim] (2d)
+                                attention_output + layer_input)  # [bs * seq_len, num_heads * head_dim] (2d)
 
                         # The activation is only applied to the "intermediate" hidden layer.
                     with tf.variable_scope("intermediate"):
